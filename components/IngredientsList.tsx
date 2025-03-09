@@ -28,14 +28,21 @@ export default function IngredientsList({ ingredients }: IngredientsListProps) {
         <View key={category} style={styles.categorySection}>
           <Text style={styles.categoryTitle}>{category}</Text>
           
-          {items.map((ingredient, index) => (
-            <View key={index} style={styles.ingredientItem}>
-              <Text style={styles.ingredientAmount}>
-                {ingredient.amount} {ingredient.unit}
-              </Text>
-              <Text style={styles.ingredientName}>{ingredient.name}</Text>
-            </View>
-          ))}
+          {items.map((ingredient, index) => {
+            // We skip ingredient.amount if it's 0, and just display ingredient.unit
+            const quantityLabel = ingredient.amount > 0 
+              ? `${ingredient.amount} ${ingredient.unit}`
+              : ingredient.unit; // fallback
+
+            return (
+              <View key={index} style={styles.ingredientItem}>
+                <Text style={styles.ingredientAmount}>
+                  {quantityLabel}
+                </Text>
+                <Text style={styles.ingredientName}>{ingredient.name}</Text>
+              </View>
+            );
+          })}
         </View>
       ))}
     </Card>

@@ -27,7 +27,7 @@ export default function MealPlanScreen() {
   const [activeTab, setActiveTab] = useState('all');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   
-  // If questionnaire is not complete, render a prompt instead
+  // If questionnaire is not complete, prompt user
   if (!isComplete) {
     return (
       <SafeAreaView style={styles.container}>
@@ -74,11 +74,9 @@ export default function MealPlanScreen() {
     if (selectedDay !== null && meal.day !== selectedDay) {
       return false;
     }
-    
     if (activeTab === 'all') {
       return true;
     }
-    
     return meal.type === activeTab;
   });
   
@@ -127,6 +125,7 @@ export default function MealPlanScreen() {
         </View>
       </View>
       
+      {/* Horizontal scroll for days */}
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
@@ -151,9 +150,8 @@ export default function MealPlanScreen() {
         </TouchableOpacity>
         
         {days.map(day => {
-          // Convert day number to day name (1 = Monday, 2 = Tuesday, etc.)
-          const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-          const dayName = dayNames[day - 1] || `Day ${day}`;
+          const dayNames = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
+          const dayName = dayNames[day-1] || `Day ${day}`;
           
           return (
             <TouchableOpacity
@@ -233,11 +231,12 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   daysContainer: {
-    maxHeight: 50,
+    // removed maxHeight
   },
   daysContent: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.sm,
+    flexDirection: 'row',
   },
   dayButton: {
     paddingVertical: SPACING.xs,

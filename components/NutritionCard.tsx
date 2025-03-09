@@ -6,87 +6,43 @@ import { SPACING } from '@/constants/theme';
 import { Nutrient } from '@/types/meal-plan';
 
 interface NutritionCardProps {
-  nutrients: Nutrient[];
   calories: number;
+  nutrients: Nutrient[];
 }
 
-export default function NutritionCard({ nutrients, calories }: NutritionCardProps) {
-  // Group nutrients by type
-  const macronutrients = nutrients.filter(n => 
-    ['Protein', 'Carbs', 'Fat'].includes(n.name)
-  );
-  
-  const vitamins = nutrients.filter(n => 
-    n.name.includes('Vitamin')
-  );
-  
-  const minerals = nutrients.filter(n => 
-    ['Calcium', 'Iron', 'Magnesium', 'Potassium', 'Sodium', 'Zinc'].includes(n.name)
-  );
-  
-  const others = nutrients.filter(n => 
-    !macronutrients.includes(n) && !vitamins.includes(n) && !minerals.includes(n)
-  );
+export default function NutritionCard({ calories, nutrients }: NutritionCardProps) {
+  // We assume you pass in `calories` = daily total, `nutrients` = daily macros, etc.
 
+  // Separate macros from others if you want
+  const protein = nutrients.find(n => n.name.toLowerCase() === 'protein')?.amount || 0;
+  const carbs = nutrients.find(n => n.name.toLowerCase() === 'carbs')?.amount || 0;
+  const fat = nutrients.find(n => n.name.toLowerCase() === 'fat')?.amount || 0;
+  
   return (
     <Card style={styles.card}>
       <View style={styles.calorieContainer}>
-        <Text style={styles.calorieValue}>{calories}</Text>
-        <Text style={styles.calorieLabel}>Calories</Text>
+        <Text style={styles.calorieValue}>{Math.round(calories)}</Text>
+        <Text style={styles.calorieLabel}>Calories (Daily)</Text>
       </View>
       
       <View style={styles.divider} />
       
-      <Text style={styles.sectionTitle}>Macronutrients</Text>
+      <Text style={styles.sectionTitle}>Macronutrients (Daily)</Text>
       <View style={styles.nutrientsGrid}>
-        {macronutrients.map((nutrient, index) => (
-          <NutrientItem key={index} nutrient={nutrient} />
-        ))}
+        <NutrientItem label="Carbs" amount={Math.round(carbs)} unit="g" color="#2196F3" />
+        <NutrientItem label="Protein" amount={Math.round(protein)} unit="g" color="#4CAF50" />
+        <NutrientItem label="Fat" amount={Math.round(fat)} unit="g" color="#FF9800" />
       </View>
-      
-      {minerals.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Minerals</Text>
-          <View style={styles.nutrientsGrid}>
-            {minerals.map((nutrient, index) => (
-              <NutrientItem key={index} nutrient={nutrient} />
-            ))}
-          </View>
-        </>
-      )}
-      
-      {vitamins.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Vitamins</Text>
-          <View style={styles.nutrientsGrid}>
-            {vitamins.map((nutrient, index) => (
-              <NutrientItem key={index} nutrient={nutrient} />
-            ))}
-          </View>
-        </>
-      )}
-      
-      {others.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Others</Text>
-          <View style={styles.nutrientsGrid}>
-            {others.map((nutrient, index) => (
-              <NutrientItem key={index} nutrient={nutrient} />
-            ))}
-          </View>
-        </>
-      )}
     </Card>
   );
 }
 
-function NutrientItem({ nutrient }: { nutrient: Nutrient }) {
+function NutrientItem({ label, amount, unit, color }: 
+  { label: string; amount: number; unit: string; color: string }) {
   return (
     <View style={styles.nutrientItem}>
-      <Text style={styles.nutrientValue}>
-        {Math.round(nutrient.amount)} {nutrient.unit}
-      </Text>
-      <Text style={styles.nutrientName}>{nutrient.name}</Text>
+      <Text style={[styles.nutrientValue, { color }]}>{amount}{unit}</Text>
+      <Text style={styles.nutrientName}>{label}</Text>
     </View>
   );
 }
@@ -121,17 +77,14 @@ const styles = StyleSheet.create({
   },
   nutrientsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: SPACING.md,
+    justifyContent: 'space-around',
   },
   nutrientItem: {
-    width: '33.33%',
-    marginBottom: SPACING.sm,
+    alignItems: 'center',
   },
   nutrientValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: Colors.text.primary,
   },
   nutrientName: {
     fontSize: 14,

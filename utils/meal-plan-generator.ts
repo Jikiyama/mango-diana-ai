@@ -1,5 +1,13 @@
 import { Platform } from 'react-native';
-import { MealPlan, ShoppingList, ShoppingItem as AppShoppingItem, Meal, Recipe, Ingredient, Nutrient } from '@/types/meal-plan';
+import { 
+  MealPlan, 
+  ShoppingList, 
+  ShoppingItem as AppShoppingItem,
+  Meal, 
+  Recipe, 
+  Ingredient, 
+  Nutrient 
+} from '@/types/meal-plan';
 import { QuestionnaireState } from '@/types/questionnaire';
 import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
 import { generateMealPlanFromAPI } from '@/services/api';
@@ -10,7 +18,6 @@ import { logger } from '@/utils/logger';
  * Primary function that gets called from your loading screen:
  * 1) Calls the API with `questionnaireData`.
  * 2) If it fails, fallback to sample data.
- * 3) Returns a { mealPlan, shoppingList } you can store.
  */
 export async function generateMealPlan(
   questionnaireData: QuestionnaireState
@@ -47,23 +54,19 @@ export async function generateMealPlan(
       logger.error('MEAL_PLAN_GENERATOR', 'API call failed, falling back to sample data', apiError);
       logger.warn('MEAL_PLAN_GENERATOR', 'Using sample data due to API error');
       
-      const fallbackPlan = buildSampleFallback(questionnaireData);
-      return fallbackPlan;
+      return buildSampleFallback(questionnaireData);
     }
     
   } catch (error) {
     logger.error('MEAL_PLAN_GENERATOR', 'Error generating meal plan, using fallback data', error);
-    
-    // 4) Final fallback if something else fails
     logger.warn('MEAL_PLAN_GENERATOR', 'Using sample data as final fallback');
     
-    const fallbackPlan = buildSampleFallback(questionnaireData);
-    return fallbackPlan;
+    return buildSampleFallback(questionnaireData);
   }
 }
 
 /**
- * buildSampleFallback - utility to build a plan from the sampleMealPlan for fallback
+ * buildSampleFallback: utility to build a plan from the sampleMealPlan for fallback
  */
 function buildSampleFallback(
   questionnaireData: QuestionnaireState
@@ -90,254 +93,260 @@ function buildSampleFallback(
 }
 
 /**
- * convertApiResponseToAppModel - parse the new shape of your API response:
- * {
- *   "meal_plan": {
- *     "Day 1": {
- *       "Breakfast": "Scrambled Egg Tacos with Avocado Salsa",
- *       "Lunch": "Chicken Fajita Bowl",
- *       "Dinner": "Mexican Grilled Shrimp Salad"
- *     }, ...
- *   },
- *   "nutritional_info": {
- *     "daily_totals": { ... },
- *     "per_meal": {
- *       "Breakfast": { "calories": 500, "carbohydrates": "...", ... },
- *       "Lunch": { ... },
- *       "Dinner": { ... }
- *     },
- *     "notes": "..."
- *   },
- *   "shopping_list": [ { "ingredient": "Eggs", "quantity": "..." }, ... ],
- *   "recipes": {
- *     "Scrambled Egg Tacos with Avocado Salsa": {
- *       "ingredients": [...strings or objects...],
- *       "instructions": "1. ... 2. ..."
- *     },
- *     ...
- *   }
- * }
- */
+ * Convert the new shape where:
+{
+  "meal_plan": {
+    "Day 1": { "Breakfast": "", "Snack": "", "Lunch": "", "Dinner": "" },
+    ...
+  },
+  "nutritional_info": {
+    "daily_totals": { ... },
+    "meal_breakdown": {
+      "Day 1": {
+        "Breakfast": { "calories": "", "macronutrients": { "carbohydrates": "", "proteins": "", "fats": "" } },
+        "Snack": { ... },
+        ...
+      },
+      "Day 2": { ... }
+    },
+    "notes": ""
+  },
+  "shopping_list": [ { "ingredient": "", "quantity": "" } ],
+  "recipes": {
+    "Recipe Title": {
+      "ingredients": [ { "item": "", "quantity": "" } ],
+      "instructions": ""
+    }
+  }
+}
+*/
 function convertApiResponseToAppModel(
   response: MealPlanResponse
 ): { mealPlan: MealPlan; shoppingList: ShoppingList } {
   logger.info('MEAL_PLAN_GENERATOR', 'Converting API response to app model');
   
-  try {
-    // 1) Basic checks
-    if (!response.meal_plan) {
-      throw new Error('Invalid API response: missing "meal_plan"');
-    }
-    if (!response.recipes) {
-      throw new Error('Invalid API response: missing "recipes"');
-    }
-    if (!response.shopping_list) {
-      throw new Error('Invalid API response: missing "shopping_list"');
-    }
+  if (!response.meal_plan) {
+    throw new Error('Invalid API response: missing "meal_plan"');
+  }
+  if (!response.nutritional_info) {
+    throw new Error('Invalid API response: missing "nutritional_info"');
+  }
+  if (!response.shopping_list) {
+    throw new Error('Invalid API response: missing "shopping_list"');
+  }
+  if (!response.recipes) {
+    throw new Error('Invalid API response: missing "recipes"');
+  }
+  
+  // Build up Meal[] 
+  const meals: Meal[] = [];
+  let totalCalories = 0;
+  
+  // Day-based meal breakdown: "Day 1", "Day 2"
+  const dayEntries = Object.entries(response.meal_plan);
+  
+  dayEntries.forEach(([dayLabel, dayMealTypes], index) => {
+    // Convert "Day 1" => numeric day
+    const dayNumber = index + 1;
     
-    // 2) Build Meal[] array
-    const meals: Meal[] = [];
-    let totalCalories = 0;
-    
-    // dayEntries: [ [ "Day 1", {Breakfast: "Scrambled Egg Tacos", ...}], [ "Day 2", {...} ] ]
-    const dayEntries = Object.entries(response.meal_plan);
-    
-    dayEntries.forEach(([dayLabel, dayMealsObj], index) => {
-      // Convert "Day 1" => numeric day
-      const dayNumber = index + 1;
+    // dayMealTypes = { "Breakfast": "Scrambled Egg Tacos ...", "Snack": "...", "Lunch": "...", "Dinner": "..." }
+    Object.entries(dayMealTypes).forEach(([mealType, mealName]) => {
+      // mealName is a string that references the key in response.recipes
+      if (!mealName) return; // in case empty
+      const recipeData = response.recipes[mealName];
+      if (!recipeData) {
+        logger.warn(
+          'MEAL_PLAN_GENERATOR',
+          `Recipe not found for name="${mealName}" in "Day ${dayNumber}" -> ${mealType}`
+        );
+        return;
+      }
       
-      // dayMealsObj might be: { Breakfast: "Scrambled Egg Tacos with Avocado Salsa", Lunch: "...", Dinner: "..." }
-      Object.entries(dayMealsObj).forEach(([mealType, mealName]) => {
-        // mealName is a string that references a key in response.recipes
-        const recipeData = response.recipes[mealName];
-        if (!recipeData) {
-          logger.warn(
-            'MEAL_PLAN_GENERATOR',
-            `Recipe not found for mealName="${mealName}"; skipping.`
-          );
-          return;
-        }
-        
-        // parse the "per_meal" breakdown for e.g. Breakfast => { calories: 500, carbs: "≈69 g", ...}
-        const mealBreakdown = response.nutritional_info?.per_meal?.[mealType];
-        const estimatedCalories = mealBreakdown?.calories ?? 0;
-        totalCalories += estimatedCalories;
-        
-        // Convert the recipe's ingredients to our Ingredient[] shape
-        let parsedIngredients: Ingredient[] = [];
-        if (Array.isArray(recipeData.ingredients)) {
-          parsedIngredients = recipeData.ingredients.map(ing => {
-            if (typeof ing === 'string') {
-              // It's a string like "2 large eggs"
-              return parseIngredientString(ing);
-            } else {
-              // Possibly an object { item: "Eggs", quantity: "2" }
-              const { item, quantity } = ing;
-              return {
-                name: item || 'Ingredient',
-                amount: 1,
-                unit: quantity || '',
-                category: getCategoryForIngredient(item || ''),
-              };
-            }
-          });
-        }
-        
-        // Convert instructions from e.g. "1. Step one 2. Step two" to string[] if you want
-        const instructionsArray = parseInstructions(recipeData.instructions);
-        
-        // Convert macros to Nutrient[]
-        const nutrients: Nutrient[] = [];
+      // Now we want the meal_breakdown for the same day + meal type
+      // e.g. response.nutritional_info.meal_breakdown["Day 1"].Breakfast
+      let mealCalories = 0;
+      let macros = { carbs: '', protein: '', fat: '' };
+      
+      const breakdownForDay = response.nutritional_info.meal_breakdown[dayLabel];
+      if (breakdownForDay) {
+        const mealBreakdown = breakdownForDay[mealType];
         if (mealBreakdown) {
-          nutrients.push({
-            name: 'Carbs',
-            amount: parseNumberFromString(mealBreakdown.carbohydrates),
-            unit: 'g'
-          });
-          nutrients.push({
-            name: 'Protein',
-            amount: parseNumberFromString(mealBreakdown.protein),
-            unit: 'g'
-          });
-          nutrients.push({
-            name: 'Fat',
-            amount: parseNumberFromString(mealBreakdown.fat),
-            unit: 'g'
-          });
+          mealCalories = parseFloat(mealBreakdown.calories || '0');
+          macros = {
+            carbs: mealBreakdown.macronutrients.carbohydrates || '',
+            protein: mealBreakdown.macronutrients.proteins || '',
+            fat: mealBreakdown.macronutrients.fats || '',
+          };
         }
-        
-        // Build the Recipe object
-        const recipe: Recipe = {
-          id: `recipe-${mealName.replace(/\s+/g, '-')}`,
-          name: mealName,
-          ingredients: parsedIngredients,
-          instructions: instructionsArray,
-          prepTime: 10, // placeholder
-          cookTime: 15, // placeholder
-          imageUrl: guessMealImageUrl(mealName),
-          nutrients,
-          calories: estimatedCalories,
-        };
-        
-        // Build the Meal
-        const mealId = `meal-${mealType.toLowerCase()}-day${dayNumber}`;
-        const newMeal: Meal = {
-          id: mealId,
-          name: mealName,
-          type: mealType.toLowerCase() as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-          day: dayNumber,
-          isFavorite: false,
-          recipe,
-        };
-        meals.push(newMeal);
+      }
+      totalCalories += mealCalories;
+      
+      // Build the `Recipe`
+      const newRecipe = buildRecipe(mealName, recipeData, mealCalories, macros);
+      
+      // Build the `Meal`
+      const mealId = `meal-${mealType.toLowerCase()}-day${dayNumber}`;
+      meals.push({
+        id: mealId,
+        name: mealName,
+        type: mealType.toLowerCase() as 'breakfast'|'lunch'|'dinner'|'snack',
+        day: dayNumber,
+        isFavorite: false,
+        recipe: newRecipe,
       });
     });
+  });
+  
+  logger.info('MEAL_PLAN_GENERATOR', `Built ${meals.length} meals, total cals ~ ${totalCalories}`);
+  
+  // Build a MealPlan object
+  const planId = `plan-${Date.now()}`;
+  const mealPlan: MealPlan = {
+    id: planId,
+    meals,
+    createdAt: new Date().toISOString(),
+    totalCalories,
+    totalNutrients: [], // We can fill from daily_totals below
+  };
+  
+  // We can also store more data if you want the "notes" or the dailyTotals
+  // Parse daily_totals
+  const dt = response.nutritional_info.daily_totals;
+  if (dt) {
+    // example: dt.calories, dt.macronutrients.{carbohydrates,proteins,fats}
+    // parse them into mealPlan.totalNutrients
+    const carbsG = parseFloat(dt.macronutrients.carbohydrates.grams || '0');
+    const proteinG = parseFloat(dt.macronutrients.proteins.grams || '0');
+    const fatsG = parseFloat(dt.macronutrients.fats.grams || '0');
     
-    logger.info(
-      'MEAL_PLAN_GENERATOR',
-      `Finished building ${meals.length} meals; total cals ~ ${totalCalories}`
-    );
-    
-    // Build the MealPlan
-    const planId = `plan-${Date.now()}`;
-    const mealPlan: MealPlan = {
-      id: planId,
-      meals,
-      createdAt: new Date().toISOString(),
-      totalCalories,
-      // We could parse overall macros from daily_totals if we want:
-      totalNutrients: []
-    };
-    
-    // 3) Convert the shopping list
-    const shoppingItems: AppShoppingItem[] = response.shopping_list.map(item => ({
-      name: item.ingredient,
-      amount: 1,
-      unit: item.quantity,
-      category: getCategoryForIngredient(item.ingredient),
-      checked: false
-    }));
-    
-    const shoppingList: ShoppingList = { items: shoppingItems };
-    
-    // Return
-    return { mealPlan, shoppingList };
-  } catch (err) {
-    logger.error('MEAL_PLAN_GENERATOR', 'Error converting API response to app model', err);
-    throw err;
+    mealPlan.totalNutrients = [
+      { name: 'Carbs', amount: carbsG, unit: 'g' },
+      { name: 'Protein', amount: proteinG, unit: 'g' },
+      { name: 'Fat', amount: fatsG, unit: 'g' },
+    ];
   }
+  
+  // Convert the shopping_list
+  const items: AppShoppingItem[] = response.shopping_list.map(si => ({
+    name: si.ingredient || 'Ingredient',
+    // remove "amount=1" so we don't show that extra "1 "
+    amount: 0,
+    unit: si.quantity || '',
+    category: getCategoryForIngredient(si.ingredient || ''),
+    checked: false,
+  }));
+  
+  const shoppingList: ShoppingList = {
+    items,
+  };
+
+  return { mealPlan, shoppingList };
 }
 
 /**
- * parseIngredientString: e.g. "2 large eggs" => { name: "eggs", amount: 2, unit: "large" }
+ * Build a `Recipe` object from the name, data, and the mealBreakdown macros
  */
-function parseIngredientString(ingredientLine: string): Ingredient {
-  const parts = ingredientLine.split(' ');
-  let amount = 1;
-  let unit = '';
-  let name = ingredientLine; // fallback
-  
-  // Try parse first token as a float
-  const maybeAmount = parseFloat(parts[0]);
-  if (!isNaN(maybeAmount)) {
-    amount = maybeAmount;
-    // If there's at least 3 tokens, treat second as "unit", the rest as the name
-    if (parts.length >= 3) {
-      unit = parts[1];
-      name = parts.slice(2).join(' ');
-    } else {
-      // e.g. "2 eggs"
-      name = parts.slice(1).join(' ');
-    }
+function buildRecipe(
+  mealName: string,
+  recipeData: { ingredients: any; instructions: string },
+  mealCalories: number,
+  macros: { carbs: string; protein: string; fat: string }
+): Recipe {
+  // parse recipe ingredients
+  let parsedIngredients: Ingredient[] = [];
+  if (Array.isArray(recipeData.ingredients)) {
+    // e.g. [ { item: "", quantity: ""}, ... ] or sometimes just strings
+    parsedIngredients = recipeData.ingredients.map(ing => {
+      if (typeof ing === 'string') {
+        // parse something like "2 large eggs"
+        return parseIngredientString(ing);
+      } else {
+        // assume { item: "", quantity: "" }
+        return {
+          name: ing.item || 'Ingredient',
+          amount: 0,
+          unit: ing.quantity || '',
+          category: getCategoryForIngredient(ing.item || ''),
+        };
+      }
+    });
   }
   
+  // parse instructions into array if needed
+  const instructionsArray = parseInstructions(recipeData.instructions);
+  
+  // parse macros
+  const nutrients: Nutrient[] = [
+    { name: 'Carbs', amount: parseNumberFromString(macros.carbs), unit: 'g' },
+    { name: 'Protein', amount: parseNumberFromString(macros.protein), unit: 'g' },
+    { name: 'Fat', amount: parseNumberFromString(macros.fat), unit: 'g' },
+  ];
+  
   return {
-    name,
-    amount,
-    unit,
-    category: getCategoryForIngredient(name),
+    id: `recipe-${mealName.replace(/\s+/g, '-')}`,
+    name: mealName,
+    ingredients: parsedIngredients,
+    instructions: instructionsArray,
+    prepTime: 10, 
+    cookTime: 15, 
+    imageUrl: guessMealImageUrl(mealName),
+    nutrients,
+    calories: mealCalories,
   };
 }
 
 /**
- * parseInstructions: from "1. do this 2. do that" into string[]
+ * parseIngredientString: e.g. "2 large eggs" => { name: "eggs", amount: 2, unit: "large" }
+ * We'll store amount=0 to avoid the "1" glitch, or parse carefully.
  */
-function parseInstructions(instructions: string | undefined): string[] {
-  if (!instructions) return [];
-  return instructions
+function parseIngredientString(ingredientLine: string): Ingredient {
+  // You can parse more thoroughly, but let's keep it simple:
+  return {
+    name: ingredientLine,
+    amount: 0,
+    unit: '',
+    category: getCategoryForIngredient(ingredientLine),
+  };
+}
+
+/**
+ * parseNumberFromString: handle "≈69 g" or "16-18 g"
+ */
+function parseNumberFromString(str?: string): number {
+  if (!str) return 0;
+  
+  // if "16-18" => average
+  const dash = str.match(/(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)/);
+  if (dash) {
+    const v1 = parseFloat(dash[1]);
+    const v2 = parseFloat(dash[2]);
+    return (v1 + v2) / 2;
+  }
+  
+  // else parse single float
+  const match = str.match(/(\d+(?:\.\d+)?)/);
+  return match ? parseFloat(match[1]) : 0;
+}
+
+/**
+ * parseInstructions: e.g. "1. step one 2. step two"
+ */
+function parseInstructions(instr: string): string[] {
+  if (!instr) return [];
+  
+  return instr
     .split(/\d+\.\s+/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
 }
 
-/**
- * parseNumberFromString: handles "≈69 g" or "≈16-18 g" => pick a float
- */
-function parseNumberFromString(str?: string): number {
-  if (!str) return 0;
-  
-  // handle "16-18" => average
-  const dashMatch = str.match(/(\d+(\.\d+)?)-(\d+(\.\d+)?)/);
-  if (dashMatch) {
-    const n1 = parseFloat(dashMatch[1]);
-    const n2 = parseFloat(dashMatch[3]);
-    return (n1 + n2) / 2;
-  }
-  
-  // handle single number
-  const match = str.match(/(\d+(\.\d+)?)/);
-  return match ? parseFloat(match[1]) : 0;
-}
-
-/**
- * guessMealImageUrl: optional placeholder if your API doesn't provide images
- */
+/** guessMealImageUrl: optional placeholder */
 function guessMealImageUrl(mealName: string): string {
   return `https://source.unsplash.com/800x600/?${encodeURIComponent(mealName)}`;
 }
 
 /**
- * getCategoryForIngredient: same logic from your code
+ * getCategoryForIngredient: your existing categorization logic
  */
 function getCategoryForIngredient(name: string): string {
   const lower = name.toLowerCase();
@@ -352,7 +361,6 @@ function getCategoryForIngredient(name: string): string {
   ) {
     return 'Protein';
   } else if (
-    lower.includes('broccoli') ||
     lower.includes('pepper') ||
     lower.includes('onion') ||
     lower.includes('garlic') ||
@@ -360,18 +368,20 @@ function getCategoryForIngredient(name: string): string {
     lower.includes('spinach') ||
     lower.includes('lettuce') ||
     lower.includes('corn') ||
-    lower.includes('cabbage') ||
+    lower.includes('avocado') ||
     lower.includes('bean') ||
-    lower.includes('avocado')
+    lower.includes('cilantro') ||
+    lower.includes('lime') ||
+    lower.includes('cabbage')
   ) {
     return 'Produce';
-  } else if (lower.includes('rice') || lower.includes('pasta') || lower.includes('grain') || lower.includes('oat')) {
+  } else if (lower.includes('rice') || lower.includes('pasta') || lower.includes('grain') || lower.includes('oat') || lower.includes('tortilla')) {
     return 'Grains';
   } else if (lower.includes('milk') || lower.includes('cheese') || lower.includes('yogurt') || lower.includes('butter')) {
     return 'Dairy';
-  } else if (lower.includes('oil') || lower.includes('vinegar') || lower.includes('salsa') || lower.includes('sauce')) {
+  } else if (lower.includes('oil') || lower.includes('vinegar') || lower.includes('salsa') || lower.includes('sauce') || lower.includes('broth')) {
     return 'Condiments';
-  } else if (lower.includes('salt') || lower.includes('cumin') || lower.includes('chili') || lower.includes('powder') || lower.includes('paprika')) {
+  } else if (lower.includes('salt') || lower.includes('cumin') || lower.includes('chili') || lower.includes('powder') || lower.includes('paprika') || lower.includes('seasoning')) {
     return 'Spices';
   }
   return 'Other';
