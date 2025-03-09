@@ -14,6 +14,10 @@ export default function LoadingScreen() {
   const router = useRouter();
   const questionnaireState = useQuestionnaireStore();
   const { setCurrentPlan, setShoppingList, setLoading, setError } = useMealPlanStore();
+  
+  // We call completeQuestionnaire here upon success.
+  const { completeQuestionnaire } = useQuestionnaireStore();
+  
   const [steps, setSteps] = useState({
     step1: true,
     step2: false,
@@ -53,9 +57,8 @@ export default function LoadingScreen() {
           mealsPerDay: questionnaireState.goalSettings.mealsPerDay,
         });
         
-        // Generate meal plan based on questionnaire data
+        // Actually generate
         logger.info('LOADING', 'Calling generateMealPlan function');
-        
         try {
           logger.debug('LOADING', 'Before calling generateMealPlan');
           const { mealPlan, shoppingList } = await generateMealPlan(questionnaireState);
@@ -77,15 +80,20 @@ export default function LoadingScreen() {
           setCurrentPlan(mealPlan);
           setShoppingList(shoppingList);
           
-          // Short delay before navigation
+          // Let final UI update
           await new Promise(resolve => setTimeout(resolve, 500));
           
           if (!isMounted) return;
           setIsGenerating(false);
-          
-          // Navigate to meal plan screen
+
+          // Now that it's done, mark questionnaire complete
+          logger.info('LOADING', 'Meal plan generation done; marking questionnaire as complete');
+          completeQuestionnaire();
+
+          // Navigate to the meal plan screen
           logger.info('LOADING', 'Navigation to meal plan screen');
           router.replace('/(tabs)');
+
         } catch (mealPlanError) {
           logger.error('LOADING', 'Error in generateMealPlan function', mealPlanError);
           throw mealPlanError;
@@ -117,7 +125,7 @@ export default function LoadingScreen() {
       }
     };
     
-    // Start generating immediately instead of using a timer
+    // Start generating immediately
     logger.info('LOADING', 'Starting meal plan generation immediately');
     generatePlan();
     
@@ -138,36 +146,34 @@ export default function LoadingScreen() {
       step4: false
     });
     
-    // Reset the component state and try again immediately
+    // Reset the component state and try generation again
     const generatePlan = async () => {
       try {
         logger.info('LOADING', 'Retrying meal plan generation');
         setLoading(true);
         
-        // Simulate step progress
         setSteps(prev => ({ ...prev, step2: true }));
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         setSteps(prev => ({ ...prev, step3: true }));
         
-        // Generate meal plan based on questionnaire data
-        logger.info('LOADING', 'Calling generateMealPlan function (retry)');
         const { mealPlan, shoppingList } = await generateMealPlan(questionnaireState);
         
         setSteps(prev => ({ ...prev, step4: true }));
         
         logger.info('LOADING', `Meal plan generated successfully on retry: ${mealPlan.id}`);
         
-        // Update store with generated plan
         setCurrentPlan(mealPlan);
         setShoppingList(shoppingList);
-        
-        // Short delay before navigation
+
+        // Wait briefly
         await new Promise(resolve => setTimeout(resolve, 500));
         
         setIsGenerating(false);
+
+        // Mark complete now that it worked
+        completeQuestionnaire();
         
-        // Navigate to meal plan screen
         router.replace('/(tabs)');
       } catch (error) {
         logger.error('LOADING', 'Error in retry generatePlan function', error);
@@ -176,15 +182,14 @@ export default function LoadingScreen() {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
         setErrorMessage(errorMsg);
         
-        // Set detailed error for debugging
         if (error instanceof Error) {
           setDetailedError(`${error.name}: ${error.message}\n${error.stack || ''}`);
         } else {
           setDetailedError(JSON.stringify(error));
         }
         
-        setError('Failed to generate meal plan. Please try again.');
         setIsGenerating(false);
+        setError('Failed to generate meal plan. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -196,11 +201,6 @@ export default function LoadingScreen() {
   const handleGoBack = () => {
     logger.info('LOADING', 'User chose to go back');
     router.back();
-  };
-
-  const handleViewLogs = () => {
-    logger.info('LOADING', 'User chose to view logs');
-    router.push('/profile/logs');
   };
 
   return (
@@ -276,14 +276,6 @@ export default function LoadingScreen() {
                 style={styles.errorButton}
               />
             </View>
-            
-            <Button 
-              title="View Logs" 
-              onPress={handleViewLogs}
-              variant="text"
-              size="small"
-              style={styles.viewLogsButton}
-            />
             
             {Platform.OS !== 'web' && detailedError ? (
               <View style={styles.detailedErrorContainer}>
@@ -436,9 +428,6 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.xs,
     minWidth: 120,
   },
-  viewLogsButton: {
-    marginTop: SPACING.sm,
-  },
   detailedErrorContainer: {
     marginTop: SPACING.md,
     padding: SPACING.sm,
@@ -452,7 +441,5 @@ const styles = StyleSheet.create({
   },
   detailedErrorText: {
     fontSize: 10,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    color: '#666',
   },
 });

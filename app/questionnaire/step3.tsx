@@ -25,8 +25,7 @@ export default function GoalSettingsStep() {
   const { 
     goalSettings, 
     updateGoalSettings, 
-    prevStep, 
-    completeQuestionnaire 
+    prevStep,
   } = useQuestionnaireStore();
   
   const [healthGoal, setHealthGoal] = useState<HealthGoal>(
@@ -45,9 +44,15 @@ export default function GoalSettingsStep() {
     router.back();
   };
 
+  /**
+   * Instead of calling completeQuestionnaire() here,
+   * we simply push the loading screen.
+   * The loading screen will do the generation, then
+   * call completeQuestionnaire() upon success.
+   */
   const handleComplete = () => {
     try {
-      logger.info('QUESTIONNAIRE', 'User completed questionnaire');
+      logger.info('QUESTIONNAIRE', 'User finished step 3, about to navigate to loading screen');
       setIsSubmitting(true);
       
       // Log the final goal settings
@@ -55,10 +60,10 @@ export default function GoalSettingsStep() {
         healthGoal,
         calorieReduction: healthGoal === 'weight_loss' ? calorieReduction : undefined,
         mealPlanDays,
-        mealsPerDay
+        mealsPerDay,
       });
       
-      // Save the goal settings to the store
+      // Save to store
       updateGoalSettings({
         healthGoal,
         calorieReduction: healthGoal === 'weight_loss' ? calorieReduction : undefined,
@@ -66,13 +71,9 @@ export default function GoalSettingsStep() {
         mealsPerDay,
       });
       
-      // Mark the questionnaire as complete
-      logger.info('QUESTIONNAIRE', 'Marking questionnaire as complete');
-      completeQuestionnaire();
-      
-      // Navigate to the loading screen
-      logger.info('QUESTIONNAIRE', 'Navigating to loading screen');
+      // Now just go to loading screen
       router.push('/questionnaire/loading');
+      
     } catch (error) {
       logger.error('QUESTIONNAIRE', 'Error in handleComplete', error);
       Alert.alert(

@@ -11,19 +11,21 @@ export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireSt
   try {
     logger.info('API', 'Starting API request to generate meal plan');
     
-    // Skip actual API call on web platform
-    if (Platform.OS === 'web') {
-      logger.info('API', 'Skipping actual API call on web platform');
-      throw new Error('API calls are disabled on web platform');
-    }
-    
+    /**
+     * === Removed the snippet that used to skip on web ===
+     * // if (Platform.OS === 'web') {
+     * //   logger.info('API', 'Skipping actual API call on web platform');
+     * //   throw new Error('API calls are disabled on web platform');
+     * // }
+     */
+
     // Format the questionnaire data for the API
     const formData = formatQuestionnaireData(questionnaireData);
     
     logger.info('API', 'Sending API request with formatted data');
     logger.debug('API', 'Request payload', formData);
     
-    // Log the full URL we're calling
+    // Full URL to call
     const url = `${API_BASE_URL}/mealplan`;
     logger.debug('API', `Making POST request to ${url}`);
     
@@ -36,7 +38,7 @@ export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireSt
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        timeout: 120000, // 2 minutes timeout
+        timeout: 120000, // 2 minutes
       });
       
       logger.info('API', `API response received with status: ${response.status}`);
@@ -75,28 +77,28 @@ export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireSt
           }
         });
         
-        // Provide more specific error messages based on status codes
+        // Provide more specific error messages
         if (axiosError.response) {
           if (axiosError.response.status === 404) {
             throw new Error('API endpoint not found. Please check the API URL.');
           } else if (axiosError.response.status === 400) {
-            throw new Error('Bad request: The API rejected the data format. Please check your inputs.');
+            throw new Error('Bad request: The API rejected the data format. Check your inputs.');
           } else if (axiosError.response.status === 500) {
-            throw new Error('Server error: The API server encountered an error. Please try again later.');
+            throw new Error('Server error: The API server encountered an error. Please try later.');
           } else if (axiosError.response.status === 401 || axiosError.response.status === 403) {
             throw new Error('Authentication error: Not authorized to access this API.');
           }
         } else if (axiosError.code === 'ECONNABORTED') {
           throw new Error('API request timed out. The server took too long to respond.');
         } else if (axiosError.code === 'ERR_NETWORK') {
-          throw new Error('Network error: Could not connect to the API. Please check your internet connection.');
+          throw new Error('Network error: Could not connect to the API. Check your internet.');
         }
         
-        // If we got here, it's a different type of error
+        // Otherwise, rethrow a general error
         throw new Error(`API request failed: ${axiosError.message}`);
       }
       
-      // Re-throw the error if it's not an Axios error
+      // If it's not an AxiosError, re-throw
       throw axiosError;
     }
   } catch (error) {
@@ -111,20 +113,19 @@ export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireSt
   }
 }
 
-// Helper function to format questionnaire data for the API
+// Helper function to format data for the API
 function formatQuestionnaireData(data: QuestionnaireState) {
   const { personalInfo, dietPreferences, goalSettings } = data;
   
   logger.debug('API', 'Formatting questionnaire data for API', data);
   
-  // Create a properly formatted object for the API
   const formattedData = {
     personal_info: {
       age: personalInfo.age,
       weight: personalInfo.weight,
       height: personalInfo.height,
       gender: personalInfo.gender,
-      zip_code: personalInfo.zipCode || '10001', // Default if missing
+      zip_code: personalInfo.zipCode || '10001',
       medical_conditions: personalInfo.medicalConditions || [],
       hba1c: personalInfo.hba1c || null,
       medications: personalInfo.medications || []
