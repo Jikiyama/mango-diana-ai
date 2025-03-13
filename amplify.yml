@@ -11,9 +11,9 @@ applications:
             - npm install
         build:
           commands:
-            - expo export:web
+            - expo export:web --output-dir web-build
       artifacts:
-        baseDirectory: web-build   # <-- This is the fix!
+        baseDirectory: web-build
         files:
           - '**/*'
       cache:
