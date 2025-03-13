@@ -7,7 +7,7 @@ import {
   ScrollView, 
   TouchableOpacity 
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ArrowLeft } from 'lucide-react-native';
 import Card from '@/components/Card';
@@ -18,6 +18,7 @@ import { useMealPlanStore } from '@/store/meal-plan-store';
 export default function NutritionInfoScreen() {
   const router = useRouter();
   const { currentPlan } = useMealPlanStore();
+  const params = useLocalSearchParams();
   
   const handleBack = () => {
     router.back();
@@ -43,26 +44,52 @@ export default function NutritionInfoScreen() {
     );
   }
   
-  // Calculate daily averages
-  const totalCalories = currentPlan.totalCalories;
-  const daysCount = Array.from(new Set(currentPlan.meals.map(meal => meal.day))).length;
-  const avgDailyCalories = Math.round(totalCalories / daysCount);
+  // Get the selected day from the params or default to the current selected day in the app
+  const selectedDay = params.day ? parseInt(params.day as string, 10) : 1;
   
-  // Get macronutrient totals
-  const totalProtein = currentPlan.totalNutrients.find(n => n.name === 'Protein')?.amount || 0;
-  const totalCarbs = currentPlan.totalNutrients.find(n => n.name === 'Carbs')?.amount || 0;
-  const totalFat = currentPlan.totalNutrients.find(n => n.name === 'Fat')?.amount || 0;
+  // Filter meals for the selected day
+  const dayMeals = currentPlan.meals.filter(meal => meal.day === selectedDay);
   
-  // Calculate daily averages for macronutrients
-  const avgDailyProtein = Math.round(totalProtein / daysCount);
-  const avgDailyCarbs = Math.round(totalCarbs / daysCount);
-  const avgDailyFat = Math.round(totalFat / daysCount);
+  // Calculate totals for the selected day
+  const dayTotalCalories = dayMeals.reduce((total, meal) => total + meal.recipe.calories, 0);
+  
+  // Calculate macronutrients for the selected day
+  const proteinTotal = dayMeals.reduce((total, meal) => {
+    const protein = meal.recipe.nutrients.find(n => n.name === 'Protein');
+    return total + (protein ? protein.amount : 0);
+  }, 0);
+  
+  const carbsTotal = dayMeals.reduce((total, meal) => {
+    const carbs = meal.recipe.nutrients.find(n => n.name === 'Carbs');
+    return total + (carbs ? carbs.amount : 0);
+  }, 0);
+  
+  const fatTotal = dayMeals.reduce((total, meal) => {
+    const fat = meal.recipe.nutrients.find(n => n.name === 'Fat');
+    return total + (fat ? fat.amount : 0);
+  }, 0);
   
   // Calculate macronutrient percentages
-  const totalMacroCalories = (avgDailyProtein * 4) + (avgDailyCarbs * 4) + (avgDailyFat * 9);
-  const proteinPercentage = Math.round((avgDailyProtein * 4 / totalMacroCalories) * 100);
-  const carbsPercentage = Math.round((avgDailyCarbs * 4 / totalMacroCalories) * 100);
-  const fatPercentage = Math.round((avgDailyFat * 9 / totalMacroCalories) * 100);
+  const totalMacroCalories = (proteinTotal * 4) + (carbsTotal * 4) + (fatTotal * 9);
+  const proteinPercentage = Math.round((proteinTotal * 4 / totalMacroCalories) * 100) || 0;
+  const carbsPercentage = Math.round((carbsTotal * 4 / totalMacroCalories) * 100) || 0;
+  const fatPercentage = Math.round((fatTotal * 9 / totalMacroCalories) * 100) || 0;
+  
+  // Get meal specific calories
+  const mealTypeCalories = {
+    breakfast: dayMeals
+      .filter(meal => meal.type === 'breakfast')
+      .reduce((total, meal) => total + meal.recipe.calories, 0),
+    lunch: dayMeals
+      .filter(meal => meal.type === 'lunch')
+      .reduce((total, meal) => total + meal.recipe.calories, 0),
+    dinner: dayMeals
+      .filter(meal => meal.type === 'dinner')
+      .reduce((total, meal) => total + meal.recipe.calories, 0),
+    snack: dayMeals
+      .filter(meal => meal.type === 'snack')
+      .reduce((total, meal) => total + meal.recipe.calories, 0),
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -72,7 +99,7 @@ export default function NutritionInfoScreen() {
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <ArrowLeft size={24} color={Colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Nutritional Information</Text>
+        <Text style={styles.title}>Day {selectedDay} Nutrition</Text>
       </View>
       
       <ScrollView 
@@ -81,10 +108,10 @@ export default function NutritionInfoScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Card style={styles.calorieCard}>
-          <Text style={styles.sectionTitle}>Daily Calorie Target</Text>
+          <Text style={styles.sectionTitle}>Daily Calories</Text>
           <View style={styles.calorieContainer}>
-            <Text style={styles.calorieValue}>{avgDailyCalories}</Text>
-            <Text style={styles.calorieLabel}>calories per day</Text>
+            <Text style={styles.calorieValue}>{dayTotalCalories}</Text>
+            <Text style={styles.calorieLabel}>calories total</Text>
           </View>
         </Card>
         
@@ -106,7 +133,7 @@ export default function NutritionInfoScreen() {
           </View>
           
           <Text style={styles.macroDetail}>
-            {avgDailyProtein}g per day ({avgDailyProtein * 4} calories)
+            {Math.round(proteinTotal)}g total ({Math.round(proteinTotal * 4)} calories)
           </Text>
           <Text style={styles.macroDescription}>
             Protein is essential for muscle repair and growth, and helps you feel full longer.
@@ -129,7 +156,7 @@ export default function NutritionInfoScreen() {
           </View>
           
           <Text style={styles.macroDetail}>
-            {avgDailyCarbs}g per day ({avgDailyCarbs * 4} calories)
+            {Math.round(carbsTotal)}g total ({Math.round(carbsTotal * 4)} calories)
           </Text>
           <Text style={styles.macroDescription}>
             Carbohydrates are your body's main source of energy, fueling both physical activity and brain function.
@@ -152,7 +179,7 @@ export default function NutritionInfoScreen() {
           </View>
           
           <Text style={styles.macroDetail}>
-            {avgDailyFat}g per day ({avgDailyFat * 9} calories)
+            {Math.round(fatTotal)}g total ({Math.round(fatTotal * 9)} calories)
           </Text>
           <Text style={styles.macroDescription}>
             Healthy fats are essential for hormone production, vitamin absorption, and brain health.
@@ -162,30 +189,38 @@ export default function NutritionInfoScreen() {
         <Text style={styles.sectionHeader}>Meal Breakdown</Text>
         
         <Card style={styles.mealsCard}>
-          <View style={styles.mealRow}>
-            <Text style={styles.mealType}>Breakfast</Text>
-            <Text style={styles.mealCalories}>~350 calories</Text>
-          </View>
+          {mealTypeCalories.breakfast > 0 && (
+            <View style={styles.mealRow}>
+              <Text style={styles.mealType}>Breakfast</Text>
+              <Text style={styles.mealCalories}>{mealTypeCalories.breakfast} calories</Text>
+            </View>
+          )}
           
-          <View style={styles.mealRow}>
-            <Text style={styles.mealType}>Lunch</Text>
-            <Text style={styles.mealCalories}>~450 calories</Text>
-          </View>
+          {mealTypeCalories.lunch > 0 && (
+            <View style={styles.mealRow}>
+              <Text style={styles.mealType}>Lunch</Text>
+              <Text style={styles.mealCalories}>{mealTypeCalories.lunch} calories</Text>
+            </View>
+          )}
           
-          <View style={styles.mealRow}>
-            <Text style={styles.mealType}>Dinner</Text>
-            <Text style={styles.mealCalories}>~750 calories</Text>
-          </View>
+          {mealTypeCalories.dinner > 0 && (
+            <View style={styles.mealRow}>
+              <Text style={styles.mealType}>Dinner</Text>
+              <Text style={styles.mealCalories}>{mealTypeCalories.dinner} calories</Text>
+            </View>
+          )}
           
-          <View style={styles.mealRow}>
-            <Text style={styles.mealType}>Snacks</Text>
-            <Text style={styles.mealCalories}>~150 calories</Text>
-          </View>
+          {mealTypeCalories.snack > 0 && (
+            <View style={styles.mealRow}>
+              <Text style={styles.mealType}>Snacks</Text>
+              <Text style={styles.mealCalories}>{mealTypeCalories.snack} calories</Text>
+            </View>
+          )}
         </Card>
         
         <Text style={styles.nutritionNote}>
-          This meal plan is designed to provide balanced nutrition while supporting your health goals. 
-          Actual nutritional content may vary slightly based on specific ingredients and portion sizes.
+          This nutrition information is calculated based on the meals in your plan for Day {selectedDay}.
+          Values are approximations based on the recipe data.
         </Text>
       </ScrollView>
     </SafeAreaView>

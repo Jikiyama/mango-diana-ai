@@ -25,7 +25,7 @@ export default function MealPlanScreen() {
   const { currentPlan, toggleFavoriteMeal } = useMealPlanStore();
   const { isComplete } = useQuestionnaireStore();
   const [activeTab, setActiveTab] = useState('all');
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedDay, setSelectedDay] = useState<number | null>(1);
   
   // If questionnaire is not complete, prompt user
   if (!isComplete) {
@@ -71,9 +71,11 @@ export default function MealPlanScreen() {
   ).sort((a, b) => a - b);
   
   const filteredMeals = currentPlan.meals.filter(meal => {
-    if (selectedDay !== null && meal.day !== selectedDay) {
+    // Filter by selected day (which is always set)
+    if (meal.day !== selectedDay) {
       return false;
     }
+    // Filter by meal type if not "all"
     if (activeTab === 'all') {
       return true;
     }
@@ -89,7 +91,7 @@ export default function MealPlanScreen() {
   };
   
   const handleNutritionInfoPress = () => {
-    router.push('/nutrition-info');
+    router.push(`/nutrition-info?day=${selectedDay}`);
   };
   
   const renderMealItem = ({ item }: { item: Meal }) => (
@@ -125,68 +127,56 @@ export default function MealPlanScreen() {
         </View>
       </View>
       
-      {/* Horizontal scroll for days */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.daysContainer}
-        contentContainerStyle={styles.daysContent}
-      >
-        <TouchableOpacity
-          style={[
-            styles.dayButton,
-            selectedDay === null && styles.selectedDayButton,
-          ]}
-          onPress={() => setSelectedDay(null)}
+      <View style={styles.navigationContainer}>
+        {/* Horizontal scroll for days */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.daysContainer}
+          contentContainerStyle={styles.daysContent}
+          removeClippedSubviews={false}
         >
-          <Text
-            style={[
-              styles.dayButtonText,
-              selectedDay === null && styles.selectedDayButtonText,
-            ]}
-          >
-            All Days
-          </Text>
-        </TouchableOpacity>
-        
-        {days.map(day => {
-          const dayNames = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
-          const dayName = dayNames[day-1] || `Day ${day}`;
-          
-          return (
-            <TouchableOpacity
-              key={day}
-              style={[
-                styles.dayButton,
-                selectedDay === day && styles.selectedDayButton,
-              ]}
-              onPress={() => setSelectedDay(day)}
-            >
-              <Text
+          {days.map(day => {
+            const dayNames = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
+            const dayName = dayNames[day-1] || `Day ${day}`;
+            
+            return (
+              <TouchableOpacity
+                key={day}
                 style={[
-                  styles.dayButtonText,
-                  selectedDay === day && styles.selectedDayButtonText,
+                  styles.dayButton,
+                  selectedDay === day && styles.selectedDayButton,
                 ]}
+                onPress={() => setSelectedDay(day)}
               >
-                {dayName}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+                <Text
+                  style={[
+                    styles.dayButtonText,
+                    selectedDay === day && styles.selectedDayButtonText,
+                  ]}
+                >
+                  {dayName}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
       
-      <TabBar
-        tabs={[
-          { key: 'all', title: 'All Meals' },
-          { key: 'breakfast', title: 'Breakfast' },
-          { key: 'lunch', title: 'Lunch' },
-          { key: 'dinner', title: 'Dinner' },
-          { key: 'snack', title: 'Snacks' },
-        ]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        scrollable
-      />
+      <View style={styles.tabBarContainer}>
+        <TabBar
+          tabs={[
+            { key: 'all', title: 'All Meals' },
+            { key: 'breakfast', title: 'Breakfast' },
+            { key: 'lunch', title: 'Lunch' },
+            { key: 'dinner', title: 'Dinner' },
+            { key: 'snack', title: 'Snacks' },
+          ]}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          scrollable
+        />
+      </View>
       
       <FlatList
         data={filteredMeals}
@@ -230,12 +220,17 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.md,
     padding: SPACING.xs,
   },
+  navigationContainer: {
+    flexDirection: 'column',
+    marginBottom: 8,
+  },
   daysContainer: {
-    // removed maxHeight
+    height: 42,
+    marginBottom: 8,
   },
   daysContent: {
     paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.sm,
+    paddingBottom: SPACING.xs,
     flexDirection: 'row',
   },
   dayButton: {
@@ -244,12 +239,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.card,
     marginRight: SPACING.sm,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 36,
   },
   selectedDayButton: {
     backgroundColor: Colors.primary,
   },
   dayButtonText: {
     color: Colors.text.primary,
+    fontSize: 14,
+    textAlign: 'center',
   },
   selectedDayButtonText: {
     color: '#fff',
@@ -257,6 +258,7 @@ const styles = StyleSheet.create({
   },
   mealsList: {
     padding: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   emptyContainer: {
     flex: 1,
@@ -284,5 +286,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text.secondary,
     textAlign: 'center',
+  },
+  tabBarContainer: {
+    height: 46,
+    justifyContent: 'center',
+    zIndex: 10,
   },
 });
