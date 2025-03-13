@@ -13,7 +13,7 @@ applications:
           commands:
             - expo export:web
       artifacts:
-        baseDirectory: dist
+        baseDirectory: web-build   # <-- This is the fix!
         files:
           - '**/*'
       cache:
