@@ -1,17 +1,19 @@
 version: 1
 applications:
-  - appRoot: .  # or your app's folder, e.g. apps/my-app
+  - appRoot: .
     frontend:
       phases:
         preBuild:
           commands:
+            - nvm install 20
+            - nvm use 20
             - npm install -g expo-cli
             - npm install
         build:
           commands:
-            - expo build:web
+            - expo export:web
       artifacts:
-        baseDirectory: web-build
+        baseDirectory: dist
         files:
           - '**/*'
       cache:
