@@ -5,7 +5,7 @@ import { MealPlanResponse } from '@/types/api-response';
 import { logger } from '@/utils/logger';
 
 // API endpoint - make sure this is correct
-const API_BASE_URL = 'http://54.235.236.120:5000/api';
+const API_BASE_URL = 'http://localhost:5000/api';
 
 export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireState): Promise<MealPlanResponse> {
   try {
