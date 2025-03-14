@@ -300,4 +300,4 @@ if __name__ == '__main__':
         sys.exit(0)
     else:
         print("Starting Flask app...")
-        app.run(host='localhost', port=5000, debug=True)
+        app.run(host='0.0.0.0', port=5000, debug=True)
