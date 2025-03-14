@@ -290,5 +290,13 @@ def process_form_data(data):
         return str(e)
 
 if __name__ == '__main__':
-    print("Starting Flask app...")
-    app.run(host='localhost', port=5000, debug=True) 
+    # Check for the '--once' flag to run a one-time task and then exit
+    if '--once' in sys.argv:
+        print("Running one-time build task...")
+        # Place any one-time tasks here (e.g., data processing, static file generation, etc.)
+        # For demonstration, we'll simply print a message.
+        print("One-time build task complete. Exiting.")
+        sys.exit(0)
+    else:
+        print("Starting Flask app...")
+        app.run(host='localhost', port=5000, debug=True)
