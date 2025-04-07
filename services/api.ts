@@ -5,7 +5,7 @@ import { MealPlanResponse } from '@/types/api-response';
 import { logger } from '@/utils/logger';
 
 // NEW API endpoint
-const API_BASE_URL = 'https://8n4goierpj.execute-api.us-east-1.amazonaws.com/api';
+const API_BASE_URL = 'https://8n4goierpj.execute-api.us-east-1.amazonaws.com/dev';
 
 /**
  * Generate a MealPlan from the backend API
