@@ -290,14 +290,7 @@ def process_form_data(data):
         print("Error processing form data:", e)
         return str(e)
 
-if __name__ == '__main__':
-    # Check for the '--once' flag to run a one-time task and then exit
-    if '--once' in sys.argv:
-        print("Running one-time build task...")
-        # Place any one-time tasks here (e.g., data processing, static file generation, etc.)
-        # For demonstration, we'll simply print a message.
-        print("One-time build task complete. Exiting.")
-        sys.exit(0)
-    else:
-        print("Starting Flask app...")
-        app.run(host='0.0.0.0', port=5000, debug=True)
+
+# Add Mangum adapter for AWS Lambda integration:
+from mangum import Mangum
+handler = Mangum(app)
