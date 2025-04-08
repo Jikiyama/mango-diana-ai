@@ -1,123 +1,21 @@
+// services/api.ts
+ 
 import axios from 'axios';
-import { Platform } from 'react-native';
-import { QuestionnaireState } from '@/types/questionnaire';
-import { MealPlanResponse } from '@/types/api-response';
 import { logger } from '@/utils/logger';
-
-// NEW API endpoint
-const API_BASE_URL = 'https://mfeg93gr00.execute-api.us-east-1.amazonaws.com/';
-
+import { QuestionnaireState } from '@/types/questionnaire';
+ 
+// The base URL for your AWS API (Producer Lambda + status endpoint)
+const API_BASE_URL = 'https://mfeg93gr00.execute-api.us-east-1.amazonaws.com';
+ 
 /**
- * Generate a MealPlan from the backend API
+ * Helper (optional) to format questionnaire data 
+ * before sending to the /mealplan endpoint.
  */
-export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireState): Promise<MealPlanResponse> {
-  try {
-    logger.info('API', 'Starting API request to generate meal plan');
-
-    // Prepare the questionnaire data for the API
-    const formData = formatQuestionnaireData(questionnaireData);
-
-    logger.info('API', 'Sending API request with formatted data');
-    logger.debug('API', 'Request payload', formData);
-
-    // Full URL to call
-    const url = `${API_BASE_URL}/mealplan`;
-    logger.debug('API', `Making POST request to ${url}`);
-
-    // Make the API call with extended timeout and detailed logging
-    logger.debug('API', 'Starting axios request with 120s timeout');
-
-    try {
-      const response = await axios.post(url, formData, {
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        timeout: 700_000, 
-      });
-
-      logger.info('API', `API response received with status: ${response.status}`);
-      logger.debug('API', 'Response headers', response.headers);
-
-      if (response.data) {
-        logger.info('API', 'API response data received successfully');
-        logger.debug('API', 'API response data structure', {
-          keys: Object.keys(response.data),
-          hasMealPlan: !!response.data.meal_plan,
-          hasRecipes: !!response.data.recipes,
-          hasShoppingList: !!response.data.shopping_list,
-        });
-
-        // Return the response data
-        return response.data;
-      } else {
-        logger.error('API', 'API response data is empty');
-        throw new Error('Empty response from API');
-      }
-    } catch (axiosError) {
-      logger.error('API', 'Axios request failed', axiosError);
-
-      // This block handles more specific Axios errors
-      if (axios.isAxiosError(axiosError)) {
-        logger.error('API', 'Axios error details', {
-          status: axiosError.response?.status,
-          statusText: axiosError.response?.statusText,
-          data: axiosError.response?.data,
-          message: axiosError.message,
-          code: axiosError.code,
-          config: {
-            url: axiosError.config?.url,
-            method: axiosError.config?.method,
-            timeout: axiosError.config?.timeout,
-            headers: axiosError.config?.headers,
-          },
-        });
-
-        if (axiosError.response) {
-          if (axiosError.response.status === 404) {
-            throw new Error('API endpoint not found. Please check the API URL.');
-          } else if (axiosError.response.status === 400) {
-            throw new Error('Bad request: The API rejected the data format. Check your inputs.');
-          } else if (axiosError.response.status === 500) {
-            throw new Error('Server error: The API server encountered an error. Please try later.');
-          } else if (
-            axiosError.response.status === 401 ||
-            axiosError.response.status === 403
-          ) {
-            throw new Error('Authentication error: Not authorized to access this API.');
-          }
-        } else if (axiosError.code === 'ECONNABORTED') {
-          throw new Error('API request timed out. The server took too long to respond.');
-        } else if (axiosError.code === 'ERR_NETWORK') {
-          throw new Error(
-            'Network error: Could not connect to the API. Check your internet.'
-          );
-        }
-
-        // Otherwise, rethrow a general error
-        throw new Error(`API request failed: ${axiosError.message}`);
-      }
-
-      // If it's not an AxiosError, re-throw
-      throw axiosError;
-    }
-  } catch (error) {
-    logger.error('API', 'Error generating meal plan from API', error);
-
-    if (error instanceof Error) {
-      throw error;
-    } else {
-      throw new Error('Unknown error occurred while calling the API');
-    }
-  }
-}
-
-// Helper function to format data for the API
 function formatQuestionnaireData(data: QuestionnaireState) {
   const { personalInfo, dietPreferences, goalSettings } = data;
-
+ 
   logger.debug('API', 'Formatting questionnaire data for API', data);
-
+ 
   const formattedData = {
     personal_info: {
       age: personalInfo.age,
@@ -144,8 +42,101 @@ function formatQuestionnaireData(data: QuestionnaireState) {
       meals_per_day: goalSettings.mealsPerDay || 3,
     },
   };
-
+ 
   logger.info('API', 'Formatted data for API request');
-
   return formattedData;
 }
+ 
+/**
+ * (1) Create an asynchronous meal plan job by posting 
+ * your questionnaire data to /mealplan. 
+ * The server enqueues it in SQS and returns { jobId, status: "queued" } quickly.
+ */
+export async function createMealPlanJob(questionnaireData: QuestionnaireState) {
+  logger.info('API', 'Creating meal plan job (async approach)');
+ 
+  // Optional step to transform data for the backend:
+  const payload = formatQuestionnaireData(questionnaireData);
+ 
+  const url = `${API_BASE_URL}/mealplan`; // Your Producer Lambda endpoint
+  logger.debug('API', `POST to ${url} with`, payload);
+ 
+  try {
+    const response = await axios.post(url, payload, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+ 
+    logger.info('API', 'Job creation response', response.data);
+    return response.data; // { jobId: "...", status: "queued" }
+  } catch (error) {
+    logger.error('API', 'Failed to create meal plan job', error);
+    throw error;
+  }
+}
+ 
+/**
+ * (2) Check the status of a job by GET /mealplan-status?jobId=xxx
+ * The server (Producer Lambda or a new route) 
+ * looks in DynamoDB for job status: PROCESSING | COMPLETED | ERROR
+ */
+async function getMealPlanStatus(jobId: string) {
+  logger.info('API', `Checking meal plan status for jobId=${jobId}`);
+ 
+  const url = `${API_BASE_URL}/mealplan-status`; // Your "status" endpoint
+  logger.debug('API', `GET ${url}`, { jobId });
+ 
+  try {
+    const response = await axios.get(url, {
+      params: { jobId },
+    });
+    logger.debug('API', 'Status response', response.data);
+    return response.data;
+  } catch (error) {
+    logger.error('API', 'Failed to get meal plan status', error);
+    throw error;
+  }
+}
+ 
+/**
+ * (3) Poll for completion. 
+ * Repeatedly calls getMealPlanStatus(jobId) every intervalMs 
+ * until "status" is COMPLETED or ERROR, or until maxAttempts is reached.
+ */
+export function pollMealPlan(
+  jobId: string,
+  intervalMs = 5000,
+  maxAttempts = 20
+): Promise<any> {
+  logger.info('API', `Polling meal plan jobId=${jobId}`);
+ 
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+ 
+    const timer = setInterval(async () => {
+      attempts++;
+      try {
+        const data = await getMealPlanStatus(jobId);
+ 
+        if (data.status === 'COMPLETED') {
+          clearInterval(timer);
+          logger.info('API', `Meal plan job ${jobId} completed`);
+          resolve(data.result);
+        } else if (data.status === 'ERROR') {
+          clearInterval(timer);
+          logger.warn('API', `Meal plan job ${jobId} errored`, data.errorMessage);
+          reject(new Error(data.errorMessage || 'Meal plan generation failed.'));
+        } else if (attempts >= maxAttempts) {
+          clearInterval(timer);
+          logger.error('API', `Timed out waiting for meal plan jobId=${jobId}`);
+          reject(new Error('Timed out waiting for meal plan.'));
+        } else {
+          logger.debug('API', `Still processing jobId=${jobId}... attempt=${attempts}`);
+        }
+      } catch (err) {
+        clearInterval(timer);
+        reject(err);
+      }
+    }, intervalMs);
+  });
+}
+ 
