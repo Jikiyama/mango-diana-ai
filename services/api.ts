@@ -33,7 +33,7 @@ export async function generateMealPlanFromAPI(questionnaireData: QuestionnaireSt
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        timeout: 120_000, // 2 minutes
+        timeout: 700_000, 
       });
 
       logger.info('API', `API response received with status: ${response.status}`);
