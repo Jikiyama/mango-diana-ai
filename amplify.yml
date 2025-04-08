@@ -8,11 +8,8 @@ applications:
             - nvm install 20
             - nvm use 20
             - npm install
-            - pip3 install --upgrade pip
-            - pip3 install -r backend/requirements.txt
         build:
           commands:
-            - python3 backend/app.py --once
             - npx expo export --platform web --output-dir web-build
       artifacts:
         baseDirectory: web-build
@@ -21,3 +18,7 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+              # Add environment variables (if you are actually running Python as part of Amplify build):
+    environment:
+      variables:
+        OPENAI_API_KEY: 
