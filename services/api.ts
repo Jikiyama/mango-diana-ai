@@ -1,10 +1,18 @@
 // services/api.ts
 
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { logger } from '@/utils/logger';
 import { QuestionnaireState } from '@/types/questionnaire';
 
 const API_BASE_URL = 'https://mfeg93gr00.execute-api.us-east-1.amazonaws.com';
+
+/**
+ * Helper to stringify an error including non-enumerable properties (like .stack).
+ * This ensures we can see stack traces and other hidden fields in logs.
+ */
+function stringifyError(error: any): string {
+  return JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+}
 
 /**
  * Optional helper to format questionnaire data before sending to /mealplan.
@@ -70,12 +78,26 @@ export async function createMealPlanJob(questionnaireData: QuestionnaireState) {
 
     logger.info('API', 'Job creation response', response.data);
     return response.data; // e.g. { jobId: "...", status: "queued" }
+
   } catch (error: any) {
     logger.error('API', 'Failed to create meal plan job', error?.message || error);
-    if (error?.response) {
-      logger.error('API', 'Response status', error.response.status);
-      logger.error('API', 'Response data', error.response.data);
+
+    // If it's an AxiosError, we can dig deeper
+    if (axios.isAxiosError(error)) {
+      const axiosErr = error as AxiosError;
+      if (axiosErr.response) {
+        logger.error('API', 'Response status', axiosErr.response.status);
+        logger.error('API', 'Response data', axiosErr.response.data);
+      } else if (axiosErr.request) {
+        logger.error('API', 'No response received, request was:', axiosErr.request);
+      } else {
+        logger.error('API', 'Axios error setting up the request', axiosErr.message);
+      }
     }
+
+    // Log the entire error object including stack trace
+    logger.error('API', 'Full error object', stringifyError(error));
+
     throw error;
   }
 }
@@ -95,12 +117,23 @@ async function getMealPlanStatus(jobId: string) {
     });
     logger.debug('API', 'Status response', response.data);
     return response.data; // e.g. { status: "PROCESSING" | "COMPLETED" | "ERROR", ... }
+
   } catch (error: any) {
     logger.error('API', 'Failed to get meal plan status', error?.message || error);
-    if (error?.response) {
-      logger.error('API', 'Response status', error.response.status);
-      logger.error('API', 'Response data', error.response.data);
+
+    if (axios.isAxiosError(error)) {
+      const axiosErr = error as AxiosError;
+      if (axiosErr.response) {
+        logger.error('API', 'Response status', axiosErr.response.status);
+        logger.error('API', 'Response data', axiosErr.response.data);
+      } else if (axiosErr.request) {
+        logger.error('API', 'No response received, request was:', axiosErr.request);
+      } else {
+        logger.error('API', 'Axios error setting up the request', axiosErr.message);
+      }
     }
+
+    logger.error('API', 'Full error object', stringifyError(error));
     throw error;
   }
 }
@@ -149,8 +182,9 @@ export function pollMealPlan(
           // data.status === 'PROCESSING' or some other intermediate
           logger.debug('API', `Still processing jobId=${jobId}... (status=${data.status})`);
         }
-      } catch (err) {
-        logger.error('API', `Error during polling jobId=${jobId}`, err);
+      } catch (err: any) {
+        logger.error('API', `Error during polling jobId=${jobId}: ${err?.message || err}`);
+        logger.error('API', 'Full error object', stringifyError(err));
         clearInterval(timer);
         reject(err);
       }
@@ -168,11 +202,30 @@ export async function generateMealPlan(questionnaireData: QuestionnaireState) {
   logger.info('MEAL_PLAN_GENERATOR', 'Attempting to call the API for all platforms');
   logger.debug('MEAL_PLAN_GENERATOR', 'Before API call, data:', questionnaireData);
 
+  let jobResponse: any;
   try {
     // Step 1: Create the job
-    const jobResponse = await createMealPlanJob(questionnaireData);
+    jobResponse = await createMealPlanJob(questionnaireData);
     logger.debug('MEAL_PLAN_GENERATOR', 'Created job, response:', jobResponse);
+  } catch (createJobError: any) {
+    logger.error(
+      'MEAL_PLAN_GENERATOR',
+      'Failed to create meal plan job. Will fall back to sample data.',
+      createJobError?.message || createJobError
+    );
+    logger.error('MEAL_PLAN_GENERATOR', 'Full createJobError object:', stringifyError(createJobError));
 
+    // Fallback or rethrow
+    return {
+      error: true,
+      message: 'Meal plan API call failed during job creation. Falling back to sample data.',
+      sampleData: {
+        // your fallback data here
+      },
+    };
+  }
+
+  try {
     // Step 2: Poll until completion
     logger.debug('MEAL_PLAN_GENERATOR', 'Starting to poll for meal plan');
     const mealPlanData = await pollMealPlan(jobResponse.jobId);
@@ -181,18 +234,18 @@ export async function generateMealPlan(questionnaireData: QuestionnaireState) {
     // Return the successful meal plan data
     return mealPlanData;
 
-  } catch (error: any) {
-    // If there's an error, log it and optionally return a fallback
+  } catch (pollingError: any) {
     logger.error(
       'MEAL_PLAN_GENERATOR',
-      'API call failed, falling back to sample data\nData: {}',
-      error?.message || error
+      'Failed while polling for meal plan job. Will fall back to sample data.',
+      pollingError?.message || pollingError
     );
+    logger.error('MEAL_PLAN_GENERATOR', 'Full pollingError object:', stringifyError(pollingError));
 
     // Example fallback object:
     return {
       error: true,
-      message: 'Meal plan API call failed. Falling back to sample data.',
+      message: 'Meal plan API call failed during polling. Falling back to sample data.',
       sampleData: {
         /* your fallback data here */
       },
