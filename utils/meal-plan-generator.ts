@@ -1,5 +1,4 @@
 // utils/meal-plan-generator.ts
-
 import { logger } from '@/utils/logger';
 import { QuestionnaireState } from '@/types/questionnaire';
 import { MealPlan } from '@/types/meal-plan';
@@ -10,147 +9,114 @@ import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
 /**
  * Convert final API shape to your local shape. 
  * 
- * Your API returns something like:
- *
- *   Data: {
- *     "meal_plan": {
- *       "Day 1": {...},
- *       "Day 2": {...},
- *       ...
- *     },
- *     "nutritional_info": { ... }
- *   }
- *
- * But your UI code expects:
- *   {
- *     mealPlan: {
- *       id: string,
- *       createdAt: string,
- *       meals: Meal[],
- *       totalCalories: number,
- *       totalNutrients: Nutrient[],
- *     },
- *     shoppingList: ...
- *   }
+ * We log additional messages so we can see if something goes wrong.
  */
 function convertApiResponseToAppModel(apiResp: any, jobId: string) {
-  // 1) The actual data is under apiResp.Data, 
-  //    so let's unify that shape for convenience:
-  const topLevel = apiResp?.Data || apiResp;
+  logger.debug('MEAL_PLAN_GENERATOR', 'Entered convertApiResponseToAppModel', { jobId, apiResp });
 
-  // 2) Extract "meal_plan" from the top-level object
-  //    per your final real shape:
-  const mealPlanObj = topLevel?.meal_plan;
-  if (!mealPlanObj) {
-    logger.warn(
-      'MEAL_PLAN_GENERATOR',
-      'convertApiResponseToAppModel: "meal_plan" was missing in final API response'
-    );
-    return null; // This causes fallback in generateMealPlan
-  }
+  try {
+    // If your shape is Data: { meal_plan: {...}, nutritional_info: {...} }
+    // we unify that here.
+    const topLevel = apiResp?.Data || apiResp;
+    logger.debug('MEAL_PLAN_GENERATOR', 'topLevel object', topLevel); // <-- ADDED LOGGING
 
-  // 3) Extract "nutritional_info" if present
-  const nutritionalInfo = topLevel?.nutritional_info || {};
+    if (!topLevel) {
+      logger.warn('MEAL_PLAN_GENERATOR', 'No "Data" or top-level object found, returning null');
+      return null;
+    }
 
-  // We'll build up an array of "Meal" objects:
-  const mealArray = [];
+    const mealPlanObj = topLevel.meal_plan;
+    logger.debug('MEAL_PLAN_GENERATOR', 'mealPlanObj', mealPlanObj); // <-- ADDED LOGGING
 
-  // mealPlanObj is something like:
-  // {
-  //   "Day 1": { "Breakfast": "...", "Lunch": "...", "Dinner": "...", "Snack": "..." },
-  //   "Day 2": { ... },
-  //   ...
-  // }
-  Object.entries(mealPlanObj).forEach(([dayKey, mealObj]) => {
-    // dayKey might be "Day 1"
-    // mealObj might be { Breakfast: "...", Lunch: "...", Dinner: "...", Snack: "..." }
-    const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
+    if (!mealPlanObj) {
+      logger.warn('MEAL_PLAN_GENERATOR', 'No "meal_plan" key found in final API response, returning null');
+      return null;
+    }
 
-    Object.entries(mealObj as any).forEach(([mealType, mealName]) => {
-      // mealType: "Breakfast", "Lunch", "Dinner", "Snack"
-      // mealName: e.g. "Oatmeal with Fruit"
-      const mealTypeLower = mealType.toLowerCase();
+    // If we reach here, we have a meal_plan
+    const nutritionalInfo = topLevel.nutritional_info || {};
+    logger.debug('MEAL_PLAN_GENERATOR', 'nutritionalInfo', nutritionalInfo); // <-- ADDED LOGGING
 
-      mealArray.push({
-        id: `meal-${dayNumber}-${mealTypeLower}`,
-        name: mealName as string,
-        type: mealTypeLower, // "breakfast"|"lunch"|"dinner"|"snack"
-        day: dayNumber,
-        isFavorite: false,
-        // Minimal "recipe" placeholder:
-        recipe: {
-          id: `recipe-${dayNumber}-${mealTypeLower}`,
+    // We'll build up an array of "Meal" objects:
+    const mealArray = [];
+
+    // mealPlanObj might be { "Day 1": {...}, "Day 2": {...} }
+    logger.debug('MEAL_PLAN_GENERATOR', 'Iterating meal_plan days...'); // <-- ADDED LOGGING
+    Object.entries(mealPlanObj).forEach(([dayKey, mealObj]) => {
+      logger.debug('MEAL_PLAN_GENERATOR', `Processing ${dayKey}`, mealObj); // <-- ADDED LOGGING
+
+      const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
+      Object.entries(mealObj as any).forEach(([mealType, mealName]) => {
+        const mealTypeLower = mealType.toLowerCase();
+        mealArray.push({
+          id: `meal-${dayNumber}-${mealTypeLower}`,
           name: mealName as string,
-          ingredients: [],
-          instructions: [],
-          prepTime: 0,
-          cookTime: 0,
-          // Stock / placeholder image:
-          imageUrl:
-            'https://via.placeholder.com/600x400?text=Meal+Image', 
-          nutrients: [],
-          calories: 0,
-        },
+          type: mealTypeLower,
+          day: dayNumber,
+          isFavorite: false,
+          recipe: {
+            id: `recipe-${dayNumber}-${mealTypeLower}`,
+            name: mealName as string,
+            ingredients: [],
+            instructions: [],
+            prepTime: 0,
+            cookTime: 0,
+            imageUrl: 'https://via.placeholder.com/600x400?text=Meal+Image', 
+            nutrients: [],
+            calories: 0,
+          },
+        });
       });
     });
-  });
 
-  // 4) Parse "daily_totals" for top-level total cals / macros
-  let totalCalories = 0;
-  let totalNutrients = [];
-  if (nutritionalInfo.daily_totals) {
-    const dt = nutritionalInfo.daily_totals;
-    // e.g. "calories": "2550 kcal"
-    // We can parse the numeric portion:
-    totalCalories = parseInt(dt.calories, 10) || 0;
+    logger.debug('MEAL_PLAN_GENERATOR', 'Finished building mealArray', { mealArray }); // <-- ADDED LOGGING
 
-    // Build a few macros. "macronutrients" might be:
-    // { carbohydrates: { grams: "352 g", ...}, fats: { grams: "70 g"}, proteins: {...} }
-    if (dt.macronutrients) {
-      const { carbohydrates, fats, proteins } = dt.macronutrients;
-      totalNutrients = [
-        {
-          name: 'carbohydrates',
-          amount: parseFloat(carbohydrates?.grams) || 0,
-          unit: 'g',
-        },
-        {
-          name: 'fats',
-          amount: parseFloat(fats?.grams) || 0,
-          unit: 'g',
-        },
-        {
-          name: 'proteins',
-          amount: parseFloat(proteins?.grams) || 0,
-          unit: 'g',
-        },
-        // You could also parse fiber, sodium, etc. 
-        // if your UI needs them in totalNutrients
-      ];
+    // Now parse daily_totals for top-level total cals/macros
+    let totalCalories = 0;
+    let totalNutrients = [];
+    if (nutritionalInfo.daily_totals) {
+      const dt = nutritionalInfo.daily_totals;
+      logger.debug('MEAL_PLAN_GENERATOR', 'daily_totals found', dt); // <-- ADDED LOGGING
+
+      // e.g. "2550 kcal"
+      // parseInt should still pick up "2550" from "2550 kcal"
+      totalCalories = parseInt(dt.calories, 10) || 0;
+
+      if (dt.macronutrients) {
+        const { carbohydrates, fats, proteins } = dt.macronutrients;
+        totalNutrients = [
+          {
+            name: 'carbohydrates',
+            amount: parseFloat(carbohydrates?.grams) || 0,
+            unit: 'g',
+          },
+          {
+            name: 'fats',
+            amount: parseFloat(fats?.grams) || 0,
+            unit: 'g',
+          },
+          {
+            name: 'proteins',
+            amount: parseFloat(proteins?.grams) || 0,
+            unit: 'g',
+          },
+        ];
+      }
+    } else {
+      logger.debug('MEAL_PLAN_GENERATOR', 'No daily_totals in nutritionalInfo'); // <-- ADDED LOGGING
     }
-  }
 
-  // 5) If we have "meal_breakdown", fill per-meal macros/cals
-  // meal_breakdown: {
-  //   "Day 1": {
-  //     "Breakfast": { "calories": "600 kcal", "macronutrients": { "carbohydrates": "82 g", ... } },
-  //     "Lunch": { ... },
-  //   },
-  //   "Day 2": { ... },
-  // }
-  if (nutritionalInfo.meal_breakdown) {
-    Object.entries(nutritionalInfo.meal_breakdown).forEach(
-      ([dayKey, dayVal]) => {
+    // Next parse meal_breakdown
+    if (nutritionalInfo.meal_breakdown) {
+      logger.debug('MEAL_PLAN_GENERATOR', 'meal_breakdown found, populating macros'); // <-- ADDED LOGGING
+      Object.entries(nutritionalInfo.meal_breakdown).forEach(([dayKey, dayVal]) => {
         const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
         Object.entries(dayVal as any).forEach(([mealType, macros]) => {
+          logger.debug('MEAL_PLAN_GENERATOR', `Populating macros for Day ${dayNumber} / ${mealType}`, macros); // <-- ADDED LOGGING
           const mealTypeLower = mealType.toLowerCase();
-          const mealObj = mealArray.find(
-            (m) => m.day === dayNumber && m.type === mealTypeLower
-          );
+          const mealObj = mealArray.find((m) => m.day === dayNumber && m.type === mealTypeLower);
           if (mealObj && macros) {
-            // macros: { "calories": "600 kcal", "macronutrients": { "carbohydrates": "82 g", ... } }
             mealObj.recipe.calories = parseInt((macros as any).calories, 10) || 0;
-
             const mm = (macros as any).macronutrients;
             if (mm) {
               mealObj.recipe.nutrients = [
@@ -173,22 +139,32 @@ function convertApiResponseToAppModel(apiResp: any, jobId: string) {
             }
           }
         });
-      }
-    );
-  }
+      });
+    } else {
+      logger.debug('MEAL_PLAN_GENERATOR', 'No meal_breakdown in nutritionalInfo'); // <-- ADDED LOGGING
+    }
 
-  // Return the final shape the front-end expects:
-  return {
-    mealPlan: {
-      id: `plan-${jobId}`, // or some ID from the server
-      createdAt: new Date().toISOString(),
-      meals: mealArray,
-      totalCalories,
-      totalNutrients,
-    },
-    // If your API eventually includes a "shopping_list", parse it here
-    shoppingList: null,
-  };
+    // Return final shape
+    const finalPlan = {
+      mealPlan: {
+        id: `plan-${jobId}`,
+        createdAt: new Date().toISOString(),
+        meals: mealArray,
+        totalCalories,
+        totalNutrients,
+      },
+      shoppingList: null,
+    };
+
+    logger.debug('MEAL_PLAN_GENERATOR', 'finalPlan created successfully', finalPlan); // <-- ADDED LOGGING
+    return finalPlan;
+  } catch (err: any) {
+    logger.error('MEAL_PLAN_GENERATOR', 'Error while converting API response', {
+      message: err?.message,
+      stack: err?.stack,
+    });
+    return null;
+  }
 }
 
 /**
@@ -298,5 +274,5 @@ export async function generateMealPlan(questionnaireData: QuestionnaireState) {
   }
 
   logger.info('MEAL_PLAN_GENERATOR', 'Returning final meal plan from real API', unified);
-  return unified; 
+  return unified;
 }
