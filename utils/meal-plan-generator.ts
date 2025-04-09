@@ -2,7 +2,7 @@
 
 import { logger } from '@/utils/logger';
 import { QuestionnaireState } from '@/types/questionnaire';
-import { MealPlan, ShoppingList } from '@/types/meal-plan';
+import { MealPlan } from '@/types/meal-plan';
 
 import { createMealPlanJob, pollMealPlan } from '@/services/api';
 import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
@@ -10,25 +10,18 @@ import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
 /**
  * Convert final API shape to your local shape. 
  * 
- * The API (per your sample) returns something like:
+ * Your API returns something like:
  *
- *   {
- *     "mealPlan": {
- *       "id": "...",
- *       "days": {
- *         "Day 1": { "Breakfast": "Overnight Oats...", ... },
- *         "Day 2": { ... },
- *         ...
- *       },
- *       "notes": "",
- *       "nutritionalInfo": {
- *         "daily_totals": { ... },
- *         "meal_breakdown": { ... }
- *       }
- *     }
+ *   Data: {
+ *     "meal_plan": {
+ *       "Day 1": {...},
+ *       "Day 2": {...},
+ *       ...
+ *     },
+ *     "nutritional_info": { ... }
  *   }
  *
- * But your UI code expects an object with an array of Meal objects:
+ * But your UI code expects:
  *   {
  *     mealPlan: {
  *       id: string,
@@ -41,53 +34,60 @@ import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
  *   }
  */
 function convertApiResponseToAppModel(apiResp: any, jobId: string) {
-  // If the API returns your entire JSON under "apiResp.mealPlan"
-  // we check that it exists:
-  const mealPlanFromApi = apiResp?.mealPlan;
-  if (!mealPlanFromApi || !mealPlanFromApi.days) {
+  // 1) The actual data is under apiResp.Data, 
+  //    so let's unify that shape for convenience:
+  const topLevel = apiResp?.Data || apiResp;
+
+  // 2) Extract "meal_plan" from the top-level object
+  //    per your final real shape:
+  const mealPlanObj = topLevel?.meal_plan;
+  if (!mealPlanObj) {
     logger.warn(
       'MEAL_PLAN_GENERATOR',
-      'convertApiResponseToAppModel: "mealPlan" or "days" was missing in API response'
+      'convertApiResponseToAppModel: "meal_plan" was missing in final API response'
     );
-    return null; // This will trigger fallback in generateMealPlan
+    return null; // This causes fallback in generateMealPlan
   }
+
+  // 3) Extract "nutritional_info" if present
+  const nutritionalInfo = topLevel?.nutritional_info || {};
 
   // We'll build up an array of "Meal" objects:
   const mealArray = [];
 
-  // mealPlanFromApi.days is something like:
+  // mealPlanObj is something like:
   // {
   //   "Day 1": { "Breakfast": "...", "Lunch": "...", "Dinner": "...", "Snack": "..." },
   //   "Day 2": { ... },
   //   ...
   // }
-  Object.entries(mealPlanFromApi.days).forEach(([dayKey, mealObj]) => {
+  Object.entries(mealPlanObj).forEach(([dayKey, mealObj]) => {
     // dayKey might be "Day 1"
-    // mealObj might be { Breakfast: "...", Lunch: "...", Dinner: "..." }
+    // mealObj might be { Breakfast: "...", Lunch: "...", Dinner: "...", Snack: "..." }
     const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
 
-    Object.entries(mealObj).forEach(([mealType, mealName]) => {
-      // mealType: "Breakfast" or "Lunch" or "Dinner" or "Snack"
-      // mealName: e.g. "Overnight Oats with Berries"
-      // We'll create a unique ID for each meal:
+    Object.entries(mealObj as any).forEach(([mealType, mealName]) => {
+      // mealType: "Breakfast", "Lunch", "Dinner", "Snack"
+      // mealName: e.g. "Oatmeal with Fruit"
       const mealTypeLower = mealType.toLowerCase();
 
       mealArray.push({
         id: `meal-${dayNumber}-${mealTypeLower}`,
-        name: mealName,
+        name: mealName as string,
         type: mealTypeLower, // "breakfast"|"lunch"|"dinner"|"snack"
         day: dayNumber,
         isFavorite: false,
-        // The front-end expects a "recipe" object:
+        // Minimal "recipe" placeholder:
         recipe: {
           id: `recipe-${dayNumber}-${mealTypeLower}`,
-          name: mealName,
-          ingredients: [],          // We'll keep these empty or you can fill them
-          instructions: [],         // The code typically reads from meal.recipe.instructions
+          name: mealName as string,
+          ingredients: [],
+          instructions: [],
           prepTime: 0,
           cookTime: 0,
-          // We'll use a placeholder image:
-          imageUrl: 'https://via.placeholder.com/600x400?text=Meal+Image', // <-- CHANGED
+          // Stock / placeholder image:
+          imageUrl:
+            'https://via.placeholder.com/600x400?text=Meal+Image', 
           nutrients: [],
           calories: 0,
         },
@@ -95,67 +95,64 @@ function convertApiResponseToAppModel(apiResp: any, jobId: string) {
     });
   });
 
-  // If we have "nutritionalInfo" in the API, we’ll parse it:
-  const nutritionalInfo = mealPlanFromApi.nutritionalInfo || {};
+  // 4) Parse "daily_totals" for top-level total cals / macros
   let totalCalories = 0;
   let totalNutrients = [];
-
-  // If the top-level daily_totals exist, parse them:
   if (nutritionalInfo.daily_totals) {
     const dt = nutritionalInfo.daily_totals;
-    // "calories" might be "2300" or something:
+    // e.g. "calories": "2550 kcal"
+    // We can parse the numeric portion:
     totalCalories = parseInt(dt.calories, 10) || 0;
 
-    // We can store macros as the "top level" totalNutrients array:
+    // Build a few macros. "macronutrients" might be:
+    // { carbohydrates: { grams: "352 g", ...}, fats: { grams: "70 g"}, proteins: {...} }
     if (dt.macronutrients) {
-      // dt.macronutrients has { carbohydrates: { grams, percentage }, proteins: { ... }, fats: { ... } }
+      const { carbohydrates, fats, proteins } = dt.macronutrients;
       totalNutrients = [
         {
           name: 'carbohydrates',
-          amount: parseFloat(dt.macronutrients.carbohydrates.grams) || 0,
-          unit: 'g',
-        },
-        {
-          name: 'proteins',
-          amount: parseFloat(dt.macronutrients.proteins.grams) || 0,
+          amount: parseFloat(carbohydrates?.grams) || 0,
           unit: 'g',
         },
         {
           name: 'fats',
-          amount: parseFloat(dt.macronutrients.fats.grams) || 0,
+          amount: parseFloat(fats?.grams) || 0,
           unit: 'g',
         },
         {
-          name: 'fiber',
-          amount: parseFloat(dt.fiber) || 0,
+          name: 'proteins',
+          amount: parseFloat(proteins?.grams) || 0,
           unit: 'g',
         },
-        // etc. You can parse more if needed
+        // You could also parse fiber, sodium, etc. 
+        // if your UI needs them in totalNutrients
       ];
     }
   }
 
-  // If we have "meal_breakdown", we’ll fill the per-meal calories & macros:
+  // 5) If we have "meal_breakdown", fill per-meal macros/cals
+  // meal_breakdown: {
+  //   "Day 1": {
+  //     "Breakfast": { "calories": "600 kcal", "macronutrients": { "carbohydrates": "82 g", ... } },
+  //     "Lunch": { ... },
+  //   },
+  //   "Day 2": { ... },
+  // }
   if (nutritionalInfo.meal_breakdown) {
-    // meal_breakdown = { "Day 1": { "Breakfast": { "calories": "500", "macronutrients": {...} }, ... }, ... }
     Object.entries(nutritionalInfo.meal_breakdown).forEach(
-      ([dayKey, mealTypes]) => {
+      ([dayKey, dayVal]) => {
         const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
-
-        // mealTypes is something like { "Breakfast": { "calories": "500", "macronutrients": {carbohydrates, fats, proteins} }, ... }
-        Object.entries(mealTypes).forEach(([mealType, macros]) => {
-          const mealTypeLower = mealType.toLowerCase(); // "breakfast", "lunch", "dinner", etc.
+        Object.entries(dayVal as any).forEach(([mealType, macros]) => {
+          const mealTypeLower = mealType.toLowerCase();
           const mealObj = mealArray.find(
             (m) => m.day === dayNumber && m.type === mealTypeLower
           );
-
           if (mealObj && macros) {
-            // macros might be: { calories: "500", macronutrients: { carbohydrates: "...", fats: "...", proteins: "..." } }
+            // macros: { "calories": "600 kcal", "macronutrients": { "carbohydrates": "82 g", ... } }
             mealObj.recipe.calories = parseInt((macros as any).calories, 10) || 0;
 
-            // Build an array of nutrient items:
-            if ((macros as any).macronutrients) {
-              const mm = (macros as any).macronutrients;
+            const mm = (macros as any).macronutrients;
+            if (mm) {
               mealObj.recipe.nutrients = [
                 {
                   name: 'carbohydrates',
@@ -180,27 +177,22 @@ function convertApiResponseToAppModel(apiResp: any, jobId: string) {
     );
   }
 
-  // We could also store the "notes" from nutritionalInfo if needed:
-  // (Your UI might not use it, but just in case.)
-  const notes = nutritionalInfo.notes || mealPlanFromApi.notes || '';
-
   // Return the final shape the front-end expects:
   return {
     mealPlan: {
-      id: mealPlanFromApi.id || `plan-${jobId}`,
+      id: `plan-${jobId}`, // or some ID from the server
       createdAt: new Date().toISOString(),
       meals: mealArray,
       totalCalories,
       totalNutrients,
     },
-    // If you want to parse a "shoppingList" from the API, do it here:
-    // For now we can just set null, or you can create from day-based ingredients
+    // If your API eventually includes a "shopping_list", parse it here
     shoppingList: null,
   };
 }
 
 /**
- * If the real API fails, we fallback to sample data.
+ * If the real API fails or the shape is invalid, fallback to sample data.
  */
 function buildSampleFallback(q: QuestionnaireState) {
   const requestedDays = q.goalSettings.mealPlanDays || 5;
@@ -308,4 +300,3 @@ export async function generateMealPlan(questionnaireData: QuestionnaireState) {
   logger.info('MEAL_PLAN_GENERATOR', 'Returning final meal plan from real API', unified);
   return unified; 
 }
-
