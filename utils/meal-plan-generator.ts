@@ -1,38 +1,50 @@
-//
-// mealPlanService.ts (All-in-One Example)
-//
+// utils/meal-plan-generator.ts
 
-import axios, { AxiosError } from 'axios';
-import { logger } from '@/utils/logger'; // adjust your import path
+import { logger } from '@/utils/logger';
 import { QuestionnaireState } from '@/types/questionnaire';
 import { MealPlan, ShoppingList } from '@/types/meal-plan';
 
-// If you have them in a "mocks" directory:
+import { createMealPlanJob, pollMealPlan } from '@/services/api';
 import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
 
 /**
- * The base URL for your API. If you need "/dev" or "/prod"
- * in the path, include it here.
+ * Convert final API shape to your local shape. 
+ * 
+ * The API returns something like:
+ *   {
+ *     "meal_plan": { "Day 1": { ... }, "Day 2": {...} },
+ *     "notes": "...",
+ *     "nutritional_info": {...}
+ *   }
+ * 
+ * but your UI code expects:
+ *   {
+ *     mealPlan: {
+ *       id: "plan-<jobId>",
+ *       days: { Day 1: {...}, Day 2: {...} },
+ *       notes: "...",
+ *       nutritionalInfo: {...}
+ *     }
+ *   }
  */
-const API_BASE_URL = 'https://mfeg93gr00.execute-api.us-east-1.amazonaws.com';
+function convertApiResponseToAppModel(apiResp: any, jobId: string) {
+  const newPlanId = `plan-${jobId}`; // store jobId in the plan
 
-/**
- * A small helper: produce a more detailed error message from Axios errors
- */
-function formatAxiosError(error: unknown): string {
-  if (!axios.isAxiosError(error)) {
-    return String(error);
-  }
-  const axiosErr = error as AxiosError;
-  const status = axiosErr.response?.status ?? 'N/A';
-  const data   = axiosErr.response?.data   ?? 'N/A';
-  return `AxiosError: ${axiosErr.message}, status=${status}, data=${JSON.stringify(data)}`;
+  return {
+    mealPlan: {
+      id: newPlanId,
+      days: apiResp.meal_plan || {},
+      notes: apiResp.notes || '',
+      nutritionalInfo: apiResp.nutritional_info || {},
+      // etc. If your UI needs more, parse it here
+    },
+    // If the real API eventually returns a separate "shopping_list", parse it here
+    // e.g. shoppingList: apiResp.shopping_list || [],
+  };
 }
 
 /**
- * formatQuestionnaireData:
- * Convert your local `QuestionnaireState` into the JSON body
- * that your backend expects for POST /mealplan.
+ * Format your store's QuestionnaireState to the shape needed by POST /mealplan
  */
 function formatQuestionnaireData(q: QuestionnaireState) {
   return {
@@ -64,98 +76,10 @@ function formatQuestionnaireData(q: QuestionnaireState) {
 }
 
 /**
- * STEP 1: Create a meal plan job by POSTing to /mealplan
- * Returns something like: { jobId: "...", status: "queued" }
+ * If the real API fails, we fallback to sample data.
  */
-async function createMealPlanJob(questionnaire: QuestionnaireState) {
-  logger.info('API', 'Creating meal plan job (POST /mealplan)...');
-  const payload = formatQuestionnaireData(questionnaire);
-  const url = `${API_BASE_URL}/mealplan`;
-
-  logger.debug('API', 'POST URL', url);
-  logger.debug('API', 'POST Payload', payload);
-
-  try {
-    const response = await axios.post(url, payload, {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    logger.info('API', 'Job created successfully', response.data);
-    return response.data; // e.g. { jobId: "abc123", status: "queued" }
-  } catch (error) {
-    const errMsg = formatAxiosError(error);
-    logger.error('API', 'Failed to create job', errMsg);
-    throw new Error(`CreateMealPlanJob failed: ${errMsg}`);
-  }
-}
-
-/**
- * STEP 2A: Helper to do one GET request to /mealplan-status?jobId=xxx
- */
-async function getMealPlanStatus(jobId: string) {
-  const url = `${API_BASE_URL}/mealplan-status`;
-  logger.debug('API', 'GET /mealplan-status', { jobId });
-
-  try {
-    const response = await axios.get(url, { params: { jobId } });
-    logger.debug('API', 'Status response', response.data);
-    return response.data;
-  } catch (error) {
-    const errMsg = formatAxiosError(error);
-    logger.error('API', `Failed to GET /mealplan-status for jobId=${jobId}`, errMsg);
-    throw new Error(`GetMealPlanStatus failed: ${errMsg}`);
-  }
-}
-
-/**
- * STEP 2B: Poll the job until "COMPLETED" or "ERROR"
- */
-async function pollMealPlan(jobId: string, intervalMs = 5000, maxAttempts = 20): Promise<any> {
-  logger.info('API', `Polling meal plan jobId=${jobId}...`);
-
-  return new Promise((resolve, reject) => {
-    let attempts = 0;
-    const timer = setInterval(async () => {
-      attempts++;
-      logger.debug('API', `Polling attempt #${attempts}, jobId=${jobId}`);
-
-      try {
-        const data = await getMealPlanStatus(jobId);
-
-        if (data.status === 'COMPLETED') {
-          logger.info('API', `Poll success: jobId=${jobId} is COMPLETED`);
-          clearInterval(timer);
-          resolve(data.result);
-        } else if (data.status === 'ERROR') {
-          logger.error('API', `Poll fail: jobId=${jobId} reported ERROR`, data.errorMessage);
-          clearInterval(timer);
-          reject(new Error(data.errorMessage || 'Meal plan generation failed.'));
-        } else if (attempts >= maxAttempts) {
-          logger.error('API', `Poll timeout: jobId=${jobId} still not complete after ${maxAttempts} attempts`);
-          clearInterval(timer);
-          reject(new Error('Timed out waiting for meal plan.'));
-        } else {
-          // Probably "PROCESSING" — keep going
-          logger.debug('API', `jobId=${jobId} still processing (status=${data.status})`);
-        }
-      } catch (pollError) {
-        logger.error('API', `Polling error on attempt #${attempts}, jobId=${jobId}`, String(pollError));
-        clearInterval(timer);
-        reject(pollError);
-      }
-    }, intervalMs);
-  });
-}
-
-/**
- * If the real API fails, or the polling fails,
- * we build a fallback meal plan from local sample data.
- */
-function buildSampleFallback(questionnaire: QuestionnaireState): {
-  mealPlan: MealPlan;
-  shoppingList: ShoppingList;
-} {
-  const requestedDays = questionnaire.goalSettings.mealPlanDays || 5;
-
+function buildSampleFallback(q: QuestionnaireState) {
+  const requestedDays = q.goalSettings.mealPlanDays || 5;
   const fallbackPlan: MealPlan = {
     ...sampleMealPlan,
     id: `plan-${Date.now()}`,
@@ -170,48 +94,59 @@ function buildSampleFallback(questionnaire: QuestionnaireState): {
     shoppingItemsCount: fallbackShopping.items.length,
   });
 
-  return { mealPlan: fallbackPlan, shoppingList: fallbackShopping };
+  // Return shape that matches your UI code
+  return {
+    mealPlan: fallbackPlan,
+    shoppingList: fallbackShopping,
+  };
 }
 
 /**
- * MAIN ENTRY POINT:
- *  - POST /mealplan to create the job
- *  - Poll /mealplan-status for completion
- *  - If anything fails, fallback to sample data
+ * The main function:
+ *  - (1) Format data & create job
+ *  - (2) Poll for final result
+ *  - (3) Convert final result to app shape
+ *  - (4) If any step fails, fallback to sample
  */
 export async function generateMealPlan(questionnaireData: QuestionnaireState) {
   logger.info('MEAL_PLAN_GENERATOR', 'Starting meal plan generation');
 
-  // Step 1: create job
-  let jobResponse;
+  // 1) Format and create job
+  const payload = formatQuestionnaireData(questionnaireData);
+  let jobResponse: any;
   try {
-    jobResponse = await createMealPlanJob(questionnaireData);
-    if (!jobResponse || !jobResponse.jobId) {
+    jobResponse = await createMealPlanJob(payload);
+    if (!jobResponse?.jobId) {
       throw new Error('No jobId found in createMealPlanJob response.');
     }
-  } catch (createErr) {
-    logger.error('MEAL_PLAN_GENERATOR', 'API call failed (create job)', createErr);
+  } catch (err) {
+    logger.error('MEAL_PLAN_GENERATOR', 'API call failed (create job)', err);
     logger.warn('MEAL_PLAN_GENERATOR', 'Falling back to sample data due to create error');
     return buildSampleFallback(questionnaireData);
   }
 
-  // Step 2: poll
+  // 2) Poll
+  let finalApiResp: any;
   try {
-    logger.info('MEAL_PLAN_GENERATOR', 'Now polling jobId=' + jobResponse.jobId);
-    const finalResult = await pollMealPlan(jobResponse.jobId);
-    logger.info('MEAL_PLAN_GENERATOR', 'Poll completed successfully', finalResult);
-
-    // finalResult is presumably { mealPlan: {...}, shoppingList: {...} }
-    if (!finalResult) {
-      logger.warn('MEAL_PLAN_GENERATOR', 'Poll returned nothing, fallback');
-      return buildSampleFallback(questionnaireData);
-    }
-
-    // Return the final from the real API
-    return finalResult;
+    finalApiResp = await pollMealPlan(jobResponse.jobId);
+    logger.info('MEAL_PLAN_GENERATOR', 'Job polled successfully, final result', finalApiResp);
   } catch (pollErr) {
     logger.error('MEAL_PLAN_GENERATOR', 'API call failed (poll)', pollErr);
     logger.warn('MEAL_PLAN_GENERATOR', 'Falling back to sample data due to poll error');
     return buildSampleFallback(questionnaireData);
   }
+
+  if (!finalApiResp) {
+    logger.warn('MEAL_PLAN_GENERATOR', 'Poll returned nothing, fallback');
+    return buildSampleFallback(questionnaireData);
+  }
+
+  // 3) Convert shape
+  const unified = convertApiResponseToAppModel(finalApiResp, jobResponse.jobId);
+  logger.info('MEAL_PLAN_GENERATOR', 'Returning final meal plan from real API', unified);
+
+  // If your actual "shoppingList" is separate, or if finalApiResp has a "shopping_list" array,
+  // you'd unify that here too.
+
+  return unified; // e.g. { mealPlan: { id, days, notes, nutritionalInfo }, shoppingList: ... }
 }
