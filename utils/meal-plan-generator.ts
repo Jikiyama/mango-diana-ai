@@ -7,11 +7,147 @@ import { createMealPlanJob, pollMealPlan } from '@/services/api';
 import { sampleMealPlan, createShoppingList } from '@/mocks/meal-plans';
 
 function convertApiResponseToAppModel(apiResp: any, jobId: string) {
-  // ... (assume your existing transformation logic) ...
-  // This function is where you parse "Data: { meal_plan, nutritional_info }"
-  // to your local shape
+  // If the response is { Data: {...} }, unify that:
+  const topLevel = apiResp?.Data || apiResp;
+  if (!topLevel) {
+    return {}; // or null → triggers fallback
+  }
+
+  // 1) Parse meal_plan
+  const mealPlanObj = topLevel.meal_plan;
+  if (!mealPlanObj) {
+    return {}; // triggers fallback
+  }
+
+  // 2) Build an array of "Meal" objects
+  const mealArray = [];
+  Object.entries(mealPlanObj).forEach(([dayKey, dayMeals]) => {
+    // dayKey is "Day 1", "Day 2", etc.
+    const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
+
+    // dayMeals might be { Breakfast: "...", Lunch: "...", ... }
+    Object.entries(dayMeals as any).forEach(([mealType, mealString]) => {
+      const mealTypeLower = mealType.toLowerCase(); // "breakfast"
+      mealArray.push({
+        id: `meal-${dayNumber}-${mealTypeLower}`,
+        name: mealString,        // e.g. "Mexican Egg Scramble..."
+        type: mealTypeLower,
+        day: dayNumber,
+        isFavorite: false,
+        recipe: {
+          id: `recipe-${dayNumber}-${mealTypeLower}`,
+          name: mealString,
+          ingredients: [],
+          instructions: [],
+          prepTime: 0,
+          cookTime: 0,
+          imageUrl: 'https://via.placeholder.com/600x400', // placeholder
+          nutrients: [],
+          calories: 0,
+        },
+      });
+    });
+  });
+
+  // 3) Parse nutritional_info
+  const nutritionalInfo = topLevel.nutritional_info || {};
+  let totalCalories = 0;
+  let totalNutrients = [];
+  if (nutritionalInfo.daily_totals) {
+    const dt = nutritionalInfo.daily_totals;
+    // dt.calories might be "1600" or "1600 kcal"
+    totalCalories = parseInt(dt.calories, 10) || 0;
+
+    // If dt.macronutrients => { carbohydrates: {grams:"180"}, fats: {grams:"44"}, proteins:{grams:"120"} }
+    if (dt.macronutrients) {
+      const { carbohydrates, fats, proteins } = dt.macronutrients;
+      totalNutrients = [
+        {
+          name: 'carbohydrates',
+          amount: parseFloat(carbohydrates?.grams || '0'),
+          unit: 'g',
+        },
+        {
+          name: 'fats',
+          amount: parseFloat(fats?.grams || '0'),
+          unit: 'g',
+        },
+        {
+          name: 'proteins',
+          amount: parseFloat(proteins?.grams || '0'),
+          unit: 'g',
+        },
+      ];
+    }
+  }
+
+  // 4) Attach meal_breakdown macros to each meal
+  if (nutritionalInfo.meal_breakdown) {
+    Object.entries(nutritionalInfo.meal_breakdown).forEach(([dayKey, dayVal]) => {
+      const dayNumber = parseInt(dayKey.replace('Day ', ''), 10) || 1;
+
+      // dayVal might be { "Breakfast": { "calories": "400", "macronutrients": {...} }, ...}
+      Object.entries(dayVal as any).forEach(([mealType, macros]) => {
+        const mealTypeLower = mealType.toLowerCase();
+        const mealObj = mealArray.find(
+          (m) => m.day === dayNumber && m.type === mealTypeLower
+        );
+        if (mealObj && macros) {
+          mealObj.recipe.calories = parseInt((macros as any).calories, 10) || 0;
+          const mm = (macros as any).macronutrients;
+          if (mm) {
+            // mm: { carbohydrates: "50 g", fats: "15 g", proteins: "25 g" }
+            mealObj.recipe.nutrients = [
+              {
+                name: 'carbohydrates',
+                amount: parseFloat(mm.carbohydrates || '0'),
+                unit: 'g',
+              },
+              {
+                name: 'fats',
+                amount: parseFloat(mm.fats || '0'),
+                unit: 'g',
+              },
+              {
+                name: 'proteins',
+                amount: parseFloat(mm.proteins || '0'),
+                unit: 'g',
+              },
+            ];
+          }
+        }
+      });
+    });
+  }
+
+  // 5) If there's a "shopping_list" array, parse or store it
+  let finalShoppingList = null;
+  if (topLevel.shopping_list && Array.isArray(topLevel.shopping_list)) {
+    // e.g. "shopping_list": [{ "ingredient": "Eggs", "quantity": "12" }, ... ]
+    // Convert that to your store shape if needed
+    finalShoppingList = {
+      items: topLevel.shopping_list.map((item) => ({
+        name: item.ingredient,
+        amount: 1,   // or parse from item.quantity, if you have a pattern
+        unit: item.quantity,
+        category: 'Misc', // You could guess from the ingredient if you want
+        checked: false,
+      })),
+    };
+  }
+
+  // 6) Return the final shape
   return {
-    // ...
+    mealPlan: {
+      id: `plan-${jobId}`,
+      createdAt: new Date().toISOString(),
+      meals: mealArray,
+      totalCalories,
+      totalNutrients,
+      notes: nutritionalInfo.notes || '',
+    },
+    shoppingList: finalShoppingList,
+    // Potentially you could store the "recipes" as well if you want
   };
 }
 
