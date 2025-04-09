@@ -34,6 +34,9 @@ export default function LoadingScreen() {
         // 3) Store it
         setCurrentPlan(result);
 
+        // <-- ADDED: Mark the questionnaire as complete so we don't redirect to it again
+        questionnaireState.completeQuestionnaire(); // <-- CHANGED / ADDED
+
         // 4) Move on to tabs
         router.replace('/(tabs)');
       } catch (err) {
@@ -41,10 +44,12 @@ export default function LoadingScreen() {
         setError(String(err));
 
         // show an alert
-        logger.warn('LOADING', 'Showing error alert to user', { errorMessage: String(err) });
+        logger.warn('LOADING', 'Showing error alert to user', {
+          errorMessage: String(err),
+        });
         Alert.alert('Error', 'Failed to generate meal plan: ' + String(err));
 
-        // Optionally go back
+        // Optionally go back to previous
         router.back();
       } finally {
         setLoading(false);
@@ -59,10 +64,19 @@ export default function LoadingScreen() {
   }, []);
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: Colors.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
       <StatusBar style="dark" />
       <ActivityIndicator size="large" color={Colors.primary} />
-      <Text style={{ marginTop: 12, fontSize: 16, color: Colors.text.secondary }}>Generating your meal plan...</Text>
+      <Text style={{ marginTop: 12, fontSize: 16, color: Colors.text.secondary }}>
+        Generating your meal plan...
+      </Text>
     </View>
   );
 }
