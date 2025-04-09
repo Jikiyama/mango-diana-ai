@@ -71,7 +71,6 @@ export async function createMealPlanJob(questionnaireData: QuestionnaireState) {
     logger.info('API', 'Job creation response', response.data);
     return response.data; // e.g. { jobId: "...", status: "queued" }
   } catch (error: any) {
-    // Additional logging for troubleshooting
     logger.error('API', 'Failed to create meal plan job', error?.message || error);
     if (error?.response) {
       logger.error('API', 'Response status', error.response.status);
@@ -95,7 +94,7 @@ async function getMealPlanStatus(jobId: string) {
       params: { jobId },
     });
     logger.debug('API', 'Status response', response.data);
-    return response.data;
+    return response.data; // e.g. { status: "PROCESSING" | "COMPLETED" | "ERROR", ... }
   } catch (error: any) {
     logger.error('API', 'Failed to get meal plan status', error?.message || error);
     if (error?.response) {
@@ -116,7 +115,10 @@ export function pollMealPlan(
   intervalMs = 5000,
   maxAttempts = 20
 ): Promise<any> {
-  logger.info('API', `Polling meal plan jobId=${jobId} every ${intervalMs}ms, maxAttempts=${maxAttempts}`);
+  logger.info(
+    'API',
+    `Polling meal plan jobId=${jobId} every ${intervalMs}ms, maxAttempts=${maxAttempts}`
+  );
 
   return new Promise((resolve, reject) => {
     let attempts = 0;
@@ -127,6 +129,10 @@ export function pollMealPlan(
         logger.debug('API', `Polling attempt #${attempts} for jobId=${jobId}`);
         const data = await getMealPlanStatus(jobId);
 
+        // Our backend now returns:
+        //  - {status: "COMPLETED", result: {...}}
+        //  - {status: "ERROR", errorMessage: "..."}
+        //  - {status: "PROCESSING"}  (while waiting)
         if (data.status === 'COMPLETED') {
           logger.info('API', `Meal plan job ${jobId} completed successfully`);
           clearInterval(timer);
@@ -140,6 +146,7 @@ export function pollMealPlan(
           clearInterval(timer);
           reject(new Error('Timed out waiting for meal plan.'));
         } else {
+          // data.status === 'PROCESSING' or some other intermediate
           logger.debug('API', `Still processing jobId=${jobId}... (status=${data.status})`);
         }
       } catch (err) {
@@ -152,7 +159,7 @@ export function pollMealPlan(
 }
 
 /**
- * (4) Example "controller" function that 
+ * (4) "Controller" function that 
  *  - Creates the job
  *  - Polls for completion
  *  - Catches any errors or falls back to sample data if needed
@@ -182,12 +189,7 @@ export async function generateMealPlan(questionnaireData: QuestionnaireState) {
       error?.message || error
     );
 
-    // If you have fallback data or want to re-throw, handle that here:
-    // e.g., return { error: 'Failed to generate meal plan', fallback: true };
-    // or just rethrow:
-    // throw error;
-
-    // Example fallback:
+    // Example fallback object:
     return {
       error: true,
       message: 'Meal plan API call failed. Falling back to sample data.',
