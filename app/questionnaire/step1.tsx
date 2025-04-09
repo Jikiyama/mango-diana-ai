@@ -24,7 +24,8 @@ import { MedicalCondition } from '@/types/questionnaire';
 export default function PersonalInfoStep() {
   const router = useRouter();
   const { personalInfo, updatePersonalInfo, nextStep } = useQuestionnaireStore();
-  
+
+  // Existing states
   const [age, setAge] = useState(personalInfo.age?.toString() || '');
   const [weight, setWeight] = useState(personalInfo.weight?.toString() || '');
   const [height, setHeight] = useState(personalInfo.height?.toString() || '');
@@ -35,6 +36,11 @@ export default function PersonalInfoStep() {
   );
   const [hba1c, setHba1c] = useState(personalInfo.hba1c?.toString() || '');
   
+  // <-- ADDED: We also track the user’s unit selections
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>(personalInfo.weightUnit || 'kg');
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'in'>(personalInfo.heightUnit || 'cm');
+  // ^ We'll store these in the same personalInfo via questionnaire store
+
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleBack = () => {
@@ -48,7 +54,6 @@ export default function PersonalInfoStep() {
     } else {
       // If any other condition is selected, remove 'none'
       let updatedConditions = [...medicalConditions];
-      
       if (updatedConditions.includes(condition)) {
         // Remove the condition if already selected
         updatedConditions = updatedConditions.filter(c => c !== condition);
@@ -57,12 +62,10 @@ export default function PersonalInfoStep() {
         updatedConditions = updatedConditions.filter(c => c !== 'none');
         updatedConditions.push(condition);
       }
-      
       // If no conditions are selected, default to 'none'
       if (updatedConditions.length === 0) {
         updatedConditions = ['none'];
       }
-      
       setMedicalConditions(updatedConditions);
     }
   };
@@ -78,14 +81,20 @@ export default function PersonalInfoStep() {
     
     if (!weight) {
       newErrors.weight = 'Weight is required';
-    } else if (parseInt(weight) < 30 || parseInt(weight) > 500) {
-      newErrors.weight = 'Weight must be between 30 and 500 kg';
+    } else {
+      const w = parseInt(weight, 10);
+      if (w < 30 || w > 500) {
+        newErrors.weight = 'Weight must be between 30 and 500 (in your chosen unit)';
+      }
     }
     
     if (!height) {
       newErrors.height = 'Height is required';
-    } else if (parseInt(height) < 100 || parseInt(height) > 250) {
-      newErrors.height = 'Height must be between 100 and 250 cm';
+    } else {
+      const h = parseInt(height, 10);
+      if (h < 50 || h > 300) {
+        newErrors.height = 'Height must be between 50 and 300 (in your chosen unit)';
+      }
     }
     
     if (!gender) {
@@ -99,13 +108,16 @@ export default function PersonalInfoStep() {
   const handleNext = () => {
     if (validateForm()) {
       updatePersonalInfo({
-        age: parseInt(age),
-        weight: parseInt(weight),
-        height: parseInt(height),
+        age: parseInt(age, 10),
+        weight: parseInt(weight, 10),
+        height: parseInt(height, 10),
         gender,
         zipCode,
         medicalConditions,
         hba1c: hba1c ? parseFloat(hba1c) : undefined,
+        // <-- ADDED: We store the chosen units as well
+        weightUnit,
+        heightUnit,
       });
       
       nextStep();
@@ -162,28 +174,100 @@ export default function PersonalInfoStep() {
             
             <View style={styles.formColumn}>
               <Input
-                label="Weight"
-                placeholder="kg"
+                label={`Weight (${weightUnit})`} // <-- ADDED
+                placeholder={weightUnit}         // e.g. "kg" or "lbs"
                 value={weight}
                 onChangeText={setWeight}
                 keyboardType="numeric"
                 error={errors.weight}
                 maxLength={3}
               />
+              {/* <-- ADDED: small row of buttons for weight unit */}
+              <View style={styles.unitSelectorContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.unitButton,
+                    weightUnit === 'kg' && styles.unitButtonActive,
+                  ]}
+                  onPress={() => setWeightUnit('kg')}
+                >
+                  <Text
+                    style={[
+                      styles.unitButtonText,
+                      weightUnit === 'kg' && styles.unitButtonTextActive,
+                    ]}
+                  >
+                    kg
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.unitButton,
+                    weightUnit === 'lbs' && styles.unitButtonActive,
+                  ]}
+                  onPress={() => setWeightUnit('lbs')}
+                >
+                  <Text
+                    style={[
+                      styles.unitButtonText,
+                      weightUnit === 'lbs' && styles.unitButtonTextActive,
+                    ]}
+                  >
+                    lbs
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
           
           <View style={styles.formRow}>
             <View style={styles.formColumn}>
               <Input
-                label="Height"
-                placeholder="cm"
+                label={`Height (${heightUnit})`} // <-- ADDED
+                placeholder={heightUnit}         // e.g. "cm" or "in"
                 value={height}
                 onChangeText={setHeight}
                 keyboardType="numeric"
                 error={errors.height}
                 maxLength={3}
               />
+              {/* <-- ADDED: small row of buttons for height unit */}
+              <View style={styles.unitSelectorContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.unitButton,
+                    heightUnit === 'cm' && styles.unitButtonActive,
+                  ]}
+                  onPress={() => setHeightUnit('cm')}
+                >
+                  <Text
+                    style={[
+                      styles.unitButtonText,
+                      heightUnit === 'cm' && styles.unitButtonTextActive,
+                    ]}
+                  >
+                    cm
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.unitButton,
+                    heightUnit === 'in' && styles.unitButtonActive,
+                  ]}
+                  onPress={() => setHeightUnit('in')}
+                >
+                  <Text
+                    style={[
+                      styles.unitButtonText,
+                      heightUnit === 'in' && styles.unitButtonTextActive,
+                    ]}
+                  >
+                    in
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
             
             <View style={styles.formColumn}>
@@ -425,5 +509,30 @@ const styles = StyleSheet.create({
   footer: {
     padding: SPACING.lg,
     paddingTop: 0,
+  },
+  // <-- ADDED styles for unit selectors
+  unitSelectorContainer: {
+    flexDirection: 'row',
+    marginTop: SPACING.xs,
+  },
+  unitButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 4,
+    marginRight: SPACING.xs,
+  },
+  unitButtonActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.highlight,
+  },
+  unitButtonText: {
+    color: Colors.text.primary,
+    fontSize: 14,
+  },
+  unitButtonTextActive: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });

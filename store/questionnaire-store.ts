@@ -19,6 +19,7 @@ interface QuestionnaireStore extends QuestionnaireState {
   resetQuestionnaire: () => void;
 }
 
+// <-- CHANGED: We added weightUnit and heightUnit to PersonalInfo
 const initialState: QuestionnaireState = {
   currentStep: 1,
   isComplete: false,
@@ -31,6 +32,9 @@ const initialState: QuestionnaireState = {
     medicalConditions: [],
     medications: [],
     hba1c: null,
+    // <-- ADDED
+    weightUnit: 'kg',
+    heightUnit: 'cm',
   },
   dietPreferences: {
     cuisines: [],
