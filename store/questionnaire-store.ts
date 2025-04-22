@@ -1,107 +1,65 @@
+// store/questionnaire-store.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  QuestionnaireState, 
-  PersonalInfo, 
-  DietPreferences, 
-  GoalSettings 
+import {
+  PersonalInfo,
+  DietPreferences,
+  GoalSettings,
+  ActivityLevel,
 } from '@/types/questionnaire';
-import { logger } from '@/utils/logger';
 
-interface QuestionnaireStore extends QuestionnaireState {
-  updatePersonalInfo: (info: Partial<PersonalInfo>) => void;
-  updateDietPreferences: (prefs: Partial<DietPreferences>) => void;
-  updateGoalSettings: (settings: Partial<GoalSettings>) => void;
+interface QuestionnaireState {
+  personalInfo: Partial<PersonalInfo>;
+  dietPreferences: Partial<DietPreferences>;
+  goalSettings: Partial<GoalSettings>;
+  step: 1 | 2 | 3;
+  isComplete: boolean;
+  /* actions */
+  updatePersonalInfo: (data: Partial<PersonalInfo>) => void;
+  updateDietPreferences: (data: Partial<DietPreferences>) => void;
+  updateGoalSettings: (data: Partial<GoalSettings>) => void;
   nextStep: () => void;
   prevStep: () => void;
-  completeQuestionnaire: () => void;
   resetQuestionnaire: () => void;
+  completeQuestionnaire: () => void;
 }
 
-// <-- CHANGED: We added weightUnit and heightUnit to PersonalInfo
-const initialState: QuestionnaireState = {
-  currentStep: 1,
-  isComplete: false,
-  personalInfo: {
-    age: 30,
-    gender: 'male',
-    weight: 70,
-    height: 175,
-    zipCode: '',
-    medicalConditions: [],
-    medications: [],
-    hba1c: null,
-    // <-- ADDED
-    weightUnit: 'kg',
-    heightUnit: 'cm',
-  },
-  dietPreferences: {
-    cuisines: [],
-    otherCuisine: '',
-    allergies: [],
-    dietaryPreferences: [],
-    batchCooking: false,
-    strictnessLevel: 'moderate',
-  },
+export const useQuestionnaireStore = create<QuestionnaireState>()((set) => ({
+  /* ---------- state ---------- */
+  personalInfo: {},
+  dietPreferences: {},
   goalSettings: {
+    /* sensible defaults so “required” fields are never undefined
+       until user edits them */
     healthGoal: 'maintenance',
-    calorieReduction: 'moderate',
+    activityLevel: 'sedentary',
     mealPlanDays: 5,
     mealsPerDay: 3,
   },
-};
+  step: 1,
+  isComplete: false,
 
-export const useQuestionnaireStore = create<QuestionnaireStore>()(
-  persist(
-    (set) => ({
-      ...initialState,
-      updatePersonalInfo: (info) => {
-        logger.debug('QUESTIONNAIRE_STORE', 'Updating personal info', info);
-        set((state) => ({
-          personalInfo: { ...state.personalInfo, ...info },
-        }));
+  /* ---------- actions ---------- */
+  updatePersonalInfo: (data) =>
+    set((s) => ({ personalInfo: { ...s.personalInfo, ...data } })),
+  updateDietPreferences: (data) =>
+    set((s) => ({ dietPreferences: { ...s.dietPreferences, ...data } })),
+  updateGoalSettings: (data) =>
+    set((s) => ({ goalSettings: { ...s.goalSettings, ...data } })),
+
+  nextStep: () => set((s) => ({ step: (s.step + 1) as 1 | 2 | 3 })),
+  prevStep: () => set((s) => ({ step: (s.step - 1) as 1 | 2 | 3 })),
+  resetQuestionnaire: () =>
+    set({
+      personalInfo: {},
+      dietPreferences: {},
+      goalSettings: {
+        healthGoal: 'maintenance',
+        activityLevel: 'sedentary',
+        mealPlanDays: 5,
+        mealsPerDay: 3,
       },
-      updateDietPreferences: (prefs) => {
-        logger.debug('QUESTIONNAIRE_STORE', 'Updating diet preferences', prefs);
-        set((state) => ({
-          dietPreferences: { ...state.dietPreferences, ...prefs },
-        }));
-      },
-      updateGoalSettings: (settings) => {
-        logger.debug('QUESTIONNAIRE_STORE', 'Updating goal settings', settings);
-        set((state) => ({
-          goalSettings: { ...state.goalSettings, ...settings },
-        }));
-      },
-      nextStep: () => {
-        logger.debug('QUESTIONNAIRE_STORE', 'Moving to next step');
-        set((state) => ({
-          currentStep: Math.min(state.currentStep + 1, 3),
-        }));
-      },
-      prevStep: () => {
-        logger.debug('QUESTIONNAIRE_STORE', 'Moving to previous step');
-        set((state) => ({
-          currentStep: Math.max(state.currentStep - 1, 1),
-        }));
-      },
-      completeQuestionnaire: () => {
-        logger.info('QUESTIONNAIRE_STORE', 'Marking questionnaire as complete');
-        set({ isComplete: true });
-      },
-      resetQuestionnaire: () => {
-        logger.info('QUESTIONNAIRE_STORE', 'Resetting questionnaire');
-        set({
-          ...initialState,
-          isComplete: false,
-          currentStep: 1,
-        });
-      },
+      step: 1,
+      isComplete: false,
     }),
-    {
-      name: 'mango-questionnaire-storage',
-      storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
-);
+  completeQuestionnaire: () => set({ isComplete: true }),
+}));

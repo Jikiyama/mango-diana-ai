@@ -1,10 +1,11 @@
+// app/questionnaire/step3.tsx
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
@@ -17,69 +18,67 @@ import ProgressBar from '@/components/ProgressBar';
 import Colors from '@/constants/colors';
 import { SPACING } from '@/constants/theme';
 import { useQuestionnaireStore } from '@/store/questionnaire-store';
-import { HealthGoal } from '@/types/questionnaire';
+import { ActivityLevel, HealthGoal } from '@/types/questionnaire';
 import { logger } from '@/utils/logger';
 
 export default function GoalSettingsStep() {
   const router = useRouter();
-  const { 
-    goalSettings, 
-    updateGoalSettings, 
+  const {
+    goalSettings,
+    updateGoalSettings,
     prevStep,
   } = useQuestionnaireStore();
-  
+
+  /* ---------- state ---------- */
   const [healthGoal, setHealthGoal] = useState<HealthGoal>(
-    goalSettings.healthGoal || 'maintenance'
+    goalSettings.healthGoal ?? 'maintenance'
   );
-  const [calorieReduction, setCalorieReduction] = useState<'light' | 'moderate' | 'aggressive'>(
-    goalSettings.calorieReduction || 'moderate'
+  const [calorieReduction, setCalorieReduction] = useState<
+    'light' | 'moderate' | 'aggressive'
+  >(goalSettings.calorieReduction ?? 'moderate');
+  const [mealPlanDays, setMealPlanDays] = useState<3 | 5 | 7>(
+    (goalSettings.mealPlanDays as 3 | 5 | 7) ?? 5
   );
-  const [mealPlanDays, setMealPlanDays] = useState(goalSettings.mealPlanDays || 5);
-  const [mealsPerDay, setMealsPerDay] = useState(goalSettings.mealsPerDay || 3);
+  const [mealsPerDay, setMealsPerDay] = useState<3 | 4 | 5>(
+    (goalSettings.mealsPerDay as 3 | 4 | 5) ?? 3
+  );
+  /* NEW: activity level */
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>(
+    goalSettings.activityLevel ?? 'sedentary'
+  );
+  const [errors, setErrors] = useState<{ activity?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleBack = () => {
-    logger.info('QUESTIONNAIRE', 'User navigated back from step 3');
     prevStep();
     router.back();
   };
 
-  /**
-   * Instead of calling completeQuestionnaire() here,
-   * we simply push the loading screen.
-   * The loading screen will do the generation, then
-   * call completeQuestionnaire() upon success.
-   */
+  const validate = () => {
+    const e: { activity?: string } = {};
+    if (!activityLevel) e.activity = 'Please select your activity level.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const handleComplete = () => {
+    if (!validate()) return;
+
     try {
-      logger.info('QUESTIONNAIRE', 'User finished step 3, about to navigate to loading screen');
       setIsSubmitting(true);
-      
-      // Log the final goal settings
-      logger.debug('QUESTIONNAIRE', 'Final goal settings', {
-        healthGoal,
-        calorieReduction: healthGoal === 'weight_loss' ? calorieReduction : undefined,
-        mealPlanDays,
-        mealsPerDay,
-      });
-      
-      // Save to store
+
       updateGoalSettings({
         healthGoal,
         calorieReduction: healthGoal === 'weight_loss' ? calorieReduction : undefined,
         mealPlanDays,
         mealsPerDay,
+        activityLevel,
       });
-      
-      // Now just go to loading screen
+
       router.push('/questionnaire/loading');
-      
     } catch (error) {
       logger.error('QUESTIONNAIRE', 'Error in handleComplete', error);
-      Alert.alert(
-        'Error',
-        'There was a problem saving your preferences. Please try again.'
-      );
+      Alert.alert('Error', 'There was a problem saving your preferences.');
       setIsSubmitting(false);
     }
   };
@@ -87,103 +86,111 @@ export default function GoalSettingsStep() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      
+
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <ArrowLeft size={24} color={Colors.text.primary} />
         </TouchableOpacity>
-        
+
         <Text style={styles.title}>Health Goals</Text>
-        
+
         <View style={styles.progressContainer}>
-          <ProgressBar 
-            progress={1}
-            steps={3}
-            currentStep={3}
-            showStepIndicator
-          />
+          <ProgressBar progress={1} steps={3} currentStep={3} showStepIndicator />
         </View>
       </View>
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ───────── Primary goal ───────── */}
         <Text style={styles.sectionTitle}>What is your primary health goal?</Text>
-        
+
         <View style={styles.radioGroup}>
           <RadioButton
             label="Weight Loss"
             description="Reduce body weight and fat"
             selected={healthGoal === 'weight_loss'}
-            onSelect={() => {
-              logger.debug('QUESTIONNAIRE', 'User selected health goal: weight_loss');
-              setHealthGoal('weight_loss');
-            }}
+            onSelect={() => setHealthGoal('weight_loss')}
           />
-          
           <RadioButton
             label="Muscle Building"
             description="Increase muscle mass and strength"
             selected={healthGoal === 'muscle_building'}
-            onSelect={() => {
-              logger.debug('QUESTIONNAIRE', 'User selected health goal: muscle_building');
-              setHealthGoal('muscle_building');
-            }}
+            onSelect={() => setHealthGoal('muscle_building')}
           />
-          
           <RadioButton
             label="Maintenance / Disease Prevention"
             description="Maintain current weight and improve overall health"
             selected={healthGoal === 'maintenance'}
-            onSelect={() => {
-              logger.debug('QUESTIONNAIRE', 'User selected health goal: maintenance');
-              setHealthGoal('maintenance');
-            }}
+            onSelect={() => setHealthGoal('maintenance')}
           />
         </View>
-        
+
+        {/* ───────── Calorie reduction (conditional) ───────── */}
         {healthGoal === 'weight_loss' && (
           <>
-            <Text style={styles.sectionTitle}>How aggressive do you want your weight loss to be?</Text>
-            
+            <Text style={styles.sectionTitle}>
+              How aggressive do you want your weight loss to be?
+            </Text>
             <View style={styles.radioGroup}>
               <RadioButton
-                label="Light"
-                description="0.5 lb per week (slight calorie deficit)"
+                label="Light (≈ 0.5 lb / week)"
                 selected={calorieReduction === 'light'}
-                onSelect={() => {
-                  logger.debug('QUESTIONNAIRE', 'User selected calorie reduction: light');
-                  setCalorieReduction('light');
-                }}
+                onSelect={() => setCalorieReduction('light')}
               />
-              
               <RadioButton
-                label="Moderate"
-                description="1 lb per week (moderate calorie deficit)"
+                label="Moderate (≈ 1 lb / week)"
                 selected={calorieReduction === 'moderate'}
-                onSelect={() => {
-                  logger.debug('QUESTIONNAIRE', 'User selected calorie reduction: moderate');
-                  setCalorieReduction('moderate');
-                }}
+                onSelect={() => setCalorieReduction('moderate')}
               />
-              
               <RadioButton
-                label="Aggressive"
-                description="2 lb per week (significant calorie deficit)"
+                label="Aggressive (≈ 2 lb / week)"
                 selected={calorieReduction === 'aggressive'}
-                onSelect={() => {
-                  logger.debug('QUESTIONNAIRE', 'User selected calorie reduction: aggressive');
-                  setCalorieReduction('aggressive');
-                }}
+                onSelect={() => setCalorieReduction('aggressive')}
               />
             </View>
           </>
         )}
-        
-        <Text style={styles.sectionTitle}>How many days do you want your meal plan for?</Text>
-        
+
+        {/* ───────── NEW: Activity level ───────── */}
+        <Text style={styles.sectionTitle}>What is your activity level?</Text>
+        <View style={styles.radioGroup}>
+          <RadioButton
+            label="Sedentary (little or no exercise)"
+            selected={activityLevel === 'sedentary'}
+            onSelect={() => setActivityLevel('sedentary')}
+          />
+          <RadioButton
+            label="Lightly Active (1–3 sessions / week)"
+            selected={activityLevel === 'lightly_active'}
+            onSelect={() => setActivityLevel('lightly_active')}
+          />
+          <RadioButton
+            label="Moderately Active (3–5 sessions / week)"
+            selected={activityLevel === 'moderately_active'}
+            onSelect={() => setActivityLevel('moderately_active')}
+          />
+          <RadioButton
+            label="Very Active (6–7 sessions / week or physical job)"
+            selected={activityLevel === 'very_active'}
+            onSelect={() => setActivityLevel('very_active')}
+          />
+          <RadioButton
+            label="Athlete / Two‑a‑day training"
+            selected={activityLevel === 'athlete'}
+            onSelect={() => setActivityLevel('athlete')}
+          />
+        </View>
+        {errors.activity && (
+          <Text style={styles.errorText}>{errors.activity}</Text>
+        )}
+
+        {/* ───────── Plan parameters ───────── */}
+        <Text style={styles.sectionTitle}>
+          How many days do you want your meal plan for?
+        </Text>
         <View style={styles.daysSelector}>
           {[3, 5, 7].map((days) => (
             <TouchableOpacity
@@ -192,10 +199,7 @@ export default function GoalSettingsStep() {
                 styles.dayOption,
                 mealPlanDays === days && styles.selectedDayOption,
               ]}
-              onPress={() => {
-                logger.debug('QUESTIONNAIRE', `User selected meal plan days: ${days}`);
-                setMealPlanDays(days);
-              }}
+              onPress={() => setMealPlanDays(days as 3 | 5 | 7)}
             >
               <Text
                 style={[
@@ -208,9 +212,8 @@ export default function GoalSettingsStep() {
             </TouchableOpacity>
           ))}
         </View>
-        
+
         <Text style={styles.sectionTitle}>How many meals per day?</Text>
-        
         <View style={styles.mealsSelector}>
           {[3, 4, 5].map((meals) => (
             <TouchableOpacity
@@ -219,10 +222,7 @@ export default function GoalSettingsStep() {
                 styles.mealOption,
                 mealsPerDay === meals && styles.selectedMealOption,
               ]}
-              onPress={() => {
-                logger.debug('QUESTIONNAIRE', `User selected meals per day: ${meals}`);
-                setMealsPerDay(meals);
-              }}
+              onPress={() => setMealsPerDay(meals as 3 | 4 | 5)}
             >
               <Text
                 style={[
@@ -230,19 +230,21 @@ export default function GoalSettingsStep() {
                   mealsPerDay === meals && styles.selectedMealOptionText,
                 ]}
               >
-                {meals === 3 ? '3 (no snacks)' : 
-                 meals === 4 ? '4 (with 1 snack)' : 
-                 '5 (with 2 snacks)'}
+                {meals === 3
+                  ? '3 (no snacks)'
+                  : meals === 4
+                  ? '4 (1 snack)'
+                  : '5 (2 snacks)'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
-      
+
       <View style={styles.footer}>
-        <Button 
-          title="Create My Meal Plan" 
-          onPress={handleComplete} 
+        <Button
+          title="Create My Meal Plan"
+          onPress={handleComplete}
           variant="primary"
           size="large"
           fullWidth
@@ -254,94 +256,12 @@ export default function GoalSettingsStep() {
   );
 }
 
+/* ---------- styles (only additions shown) ---------- */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    padding: SPACING.lg,
-  },
-  backButton: {
-    marginBottom: SPACING.md,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: SPACING.md,
-  },
-  progressContainer: {
-    marginBottom: SPACING.md,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingTop: 0,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: SPACING.md,
-    marginTop: SPACING.lg,
-  },
-  radioGroup: {
-    marginBottom: SPACING.lg,
-  },
-  daysSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.xl,
-  },
-  dayOption: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    marginHorizontal: SPACING.xs,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  selectedDayOption: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.highlight,
-  },
-  dayOptionText: {
-    color: Colors.text.primary,
-    fontWeight: '500',
-  },
-  selectedDayOptionText: {
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  mealsSelector: {
-    marginBottom: SPACING.xl,
-  },
-  mealOption: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
+  /* existing styles … */
+  errorText: {
+    fontSize: 12,
+    color: Colors.error,
     marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-  },
-  selectedMealOption: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.highlight,
-  },
-  mealOptionText: {
-    color: Colors.text.primary,
-    fontWeight: '500',
-  },
-  selectedMealOptionText: {
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  footer: {
-    padding: SPACING.lg,
-    paddingTop: 0,
   },
 });

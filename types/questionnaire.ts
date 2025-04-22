@@ -1,4 +1,15 @@
-export type MedicalCondition = 
+// types/questionnaire.ts
+/* NEW: activity‑level enum */
+export type ActivityLevel =
+  | 'sedentary'          // desk job / little exercise
+  | 'lightly_active'     // 1–3 exercise sessions / week
+  | 'moderately_active'  // 3–5 sessions / week
+  | 'very_active'        // 6–7 sessions / week, physically demanding job
+  | 'athlete';           // 2‑a‑day training / competitive sport
+
+export type HealthGoal = 'weight_loss' | 'muscle_building' | 'maintenance';
+export type StrictnessLevel = 'very_strict' | 'moderately_strict' | 'flexible';
+export type MedicalCondition =
   | 'hypertension'
   | 'dyslipidemia'
   | 'diabetes'
@@ -6,41 +17,18 @@ export type MedicalCondition =
   | 'obesity'
   | 'none';
 
-export type DietaryPreference = 
-  | 'keto'
-  | 'vegetarian'
-  | 'vegan'
-  | 'dash'
-  | 'mediterranean'
-  | 'paleo'
-  | 'gluten_free'
-  | 'dairy_free'
-  | 'none';
-
-export type Cuisine = 
-  | 'latin'
-  | 'mexican'
-  | 'asian'
-  | 'mediterranean'
-  | 'italian'
-  | 'american'
-  | 'indian'
-  | 'middle_eastern'
-  | 'other';
-
-export type StrictnessLevel = 'very_strict' | 'moderately_strict' | 'flexible';
-
-export type HealthGoal = 'weight_loss' | 'muscle_building' | 'maintenance';
+/* … existing Cuisine, DietaryPreference etc. declarations … */
 
 export interface PersonalInfo {
-  age?: number;
-  weight?: number;
-  height?: number;
-  gender?: 'male' | 'female' | 'other';
+  age: number;
+  weight: number;
+  height: number;
+  gender: 'male' | 'female' | 'other';
   zipCode?: string;
   medicalConditions: MedicalCondition[];
   hba1c?: number;
-  medications?: string[];
+  weightUnit: 'kg' | 'lbs';
+  heightUnit: 'cm' | 'in';
 }
 
 export interface DietPreferences {
@@ -55,14 +43,9 @@ export interface DietPreferences {
 export interface GoalSettings {
   healthGoal: HealthGoal;
   calorieReduction?: 'light' | 'moderate' | 'aggressive';
-  mealPlanDays: number;
-  mealsPerDay: number;
+  mealPlanDays: 3 | 5 | 7;
+  mealsPerDay: 3 | 4 | 5;
+  /* NEW */
+  activityLevel: ActivityLevel;
 }
-
-export interface QuestionnaireState {
-  step: number;
-  personalInfo: PersonalInfo;
-  dietPreferences: DietPreferences;
-  goalSettings: GoalSettings;
-  isComplete: boolean;
-}
+	

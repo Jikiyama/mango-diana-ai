@@ -183,6 +183,7 @@ function formatQuestionnaireData(q: QuestionnaireState) {
       calorie_reduction: q.goalSettings.calorieReduction || 'moderate',
       meal_plan_days: q.goalSettings.mealPlanDays || 5,
       meals_per_day: q.goalSettings.mealsPerDay || 3,
+      activity_level: q.goalSettings.activityLevel || 'sedentary',
     },
   };
 }
