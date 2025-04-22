@@ -19,6 +19,14 @@ import Colors from '@/constants/colors';
 import { SPACING } from '@/constants/theme';
 import { useMealPlanStore } from '@/store/meal-plan-store';
 
+// Import meal type images
+const mealImages = {
+  breakfast: require('@/assets/images/breakfast.png'),
+  lunch: require('@/assets/images/lunch.png'),
+  dinner: require('@/assets/images/dinner.png'),
+  snack: require('@/assets/images/snack.png'),
+};
+
 export default function MealDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { currentPlan, toggleFavoriteMeal } = useMealPlanStore();
@@ -50,7 +58,7 @@ export default function MealDetailsScreen() {
       
       <View style={styles.imageContainer}>
         <Image 
-          source={{ uri: meal.recipe.imageUrl }} 
+          source={mealImages[meal.type]} 
           style={styles.image}
           resizeMode="cover"
         />

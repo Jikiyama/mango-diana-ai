@@ -6,6 +6,14 @@ import Colors from '@/constants/colors';
 import { BORDER_RADIUS, SPACING } from '@/constants/theme';
 import { Meal } from '@/types/meal-plan';
 
+// Import meal type images
+const mealImages = {
+  breakfast: require('@/assets/images/breakfast.png'),
+  lunch: require('@/assets/images/lunch.png'),
+  dinner: require('@/assets/images/dinner.png'),
+  snack: require('@/assets/images/snack.png'),
+};
+
 interface MealCardProps {
   meal: Meal;
   onPress: () => void;
@@ -18,7 +26,7 @@ export default function MealCard({ meal, onPress, onFavoriteToggle }: MealCardPr
       <Card style={styles.card} elevation="medium">
         <View style={styles.imageContainer}>
           <Image 
-            source={{ uri: meal.recipe.imageUrl }} 
+            source={mealImages[meal.type]} 
             style={styles.image}
             resizeMode="cover"
           />

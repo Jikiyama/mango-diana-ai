@@ -10,6 +10,7 @@ interface MealPlanStore extends MealPlanState {
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   clearCurrentPlan: () => void;
+  toggleFavoriteMeal: (mealId: string) => void;
   // plus any toggles for favorites, etc...
 }
 
@@ -23,7 +24,7 @@ const initialState: MealPlanState = {
 
 export const useMealPlanStore = create<MealPlanStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
 
       setCurrentPlan: (plan: any) => {
@@ -37,6 +38,26 @@ export const useMealPlanStore = create<MealPlanStore>()(
       setLoading: (isLoading: boolean) => set({ isLoading }),
       setError: (error: string | null) => set({ error }),
       clearCurrentPlan: () => set({ currentPlan: null, shoppingList: null }),
+      
+      toggleFavoriteMeal: (mealId: string) => {
+        const { currentPlan } = get();
+        
+        if (!currentPlan) return;
+        
+        const updatedMeals = currentPlan.meals.map(meal => {
+          if (meal.id === mealId) {
+            return { ...meal, isFavorite: !meal.isFavorite };
+          }
+          return meal;
+        });
+        
+        set({
+          currentPlan: {
+            ...currentPlan,
+            meals: updatedMeals,
+          }
+        });
+      },
     }),
     {
       name: 'mango-meal-plan-storage',
