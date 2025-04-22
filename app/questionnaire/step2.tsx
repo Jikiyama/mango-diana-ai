@@ -26,6 +26,8 @@ import {
   StrictnessLevel,
 } from '@/types/questionnaire';
 
+/* ─────────────────────────────────────────────── */
+
 export default function DietPreferencesStep() {
   const router = useRouter();
   const {
@@ -130,7 +132,12 @@ export default function DietPreferencesStep() {
           <Text style={styles.title}>Diet Preferences</Text>
 
           <View style={styles.progressContainer}>
-            <ProgressBar progress={0.66} steps={3} currentStep={2} showStepIndicator />
+            <ProgressBar
+              progress={0.66}
+              steps={3}
+              currentStep={2}
+              showStepIndicator
+            />
           </View>
         </View>
 
@@ -147,20 +154,25 @@ export default function DietPreferencesStep() {
           </Text>
 
           <View style={styles.cuisineGrid}>
-            {([
-              'latin',
-              'mexican',
-              'asian',
-              'mediterranean',
-              'italian',
-              'american',
-              'indian',
-              'middle_eastern',
-              'other',
-            ] as Cuisine[]).map((c) => (
+            {(
+              [
+                'latin',
+                'mexican',
+                'asian',
+                'mediterranean',
+                'italian',
+                'american',
+                'indian',
+                'middle_eastern',
+                'other',
+              ] as Cuisine[]
+            ).map((c) => (
               <CuisineOption
                 key={c}
-                label={c.charAt(0).toUpperCase() + c.slice(1).replace('_', ' ')}
+                label={c
+                  .charAt(0)
+                  .toUpperCase()
+                  .concat(c.slice(1).replace('_', ' '))}
                 selected={cuisines.includes(c)}
                 onToggle={() => toggleCuisine(c)}
               />
@@ -204,7 +216,10 @@ export default function DietPreferencesStep() {
               {allergies.map((a) => (
                 <View key={a} style={styles.allergyTag}>
                   <Text style={styles.allergyTagText}>{a}</Text>
-                  <TouchableOpacity onPress={() => removeAllergy(a)} style={styles.allergyTagRemove}>
+                  <TouchableOpacity
+                    onPress={() => removeAllergy(a)}
+                    style={styles.allergyTagRemove}
+                  >
                     <Text style={styles.allergyTagRemoveText}>×</Text>
                   </TouchableOpacity>
                 </View>
@@ -219,18 +234,22 @@ export default function DietPreferencesStep() {
           </Text>
 
           <View style={styles.checkboxGroup}>
-            {([
-              'keto',
-              'vegetarian',
-              'vegan',
-              'dash',
-              'mediterranean',
-              'gluten_free',
-              'dairy_free',
-            ] as DietaryPreference[]).map((p) => (
+            {(
+              [
+                'keto',
+                'vegetarian',
+                'vegan',
+                'dash',
+                'mediterranean',
+                'gluten_free',
+                'dairy_free',
+              ] as DietaryPreference[]
+            ).map((p) => (
               <Checkbox
                 key={p}
-                label={p.replace('_', '-').replace(/^./, (ch) => ch.toUpperCase())}
+                label={p
+                  .replace('_', '-')
+                  .replace(/^./, (ch) => ch.toUpperCase())}
                 checked={dietaryPrefs.includes(p)}
                 onToggle={() => toggleDietaryPreference(p)}
               />
@@ -248,7 +267,9 @@ export default function DietPreferencesStep() {
             />
           </View>
 
-          <Text style={styles.sectionSubtitle}>How strict do you want your meal plan to be?</Text>
+          <Text style={styles.sectionSubtitle}>
+            How strict do you want your meal plan to be?
+          </Text>
           <View style={styles.radioGroup}>
             <RadioButton
               label="Very Strict"
@@ -266,4 +287,192 @@ export default function DietPreferencesStep() {
               label="Flexible"
               description="I prefer gradual changes and occasional treats"
               selected={strictnessLevel === 'flexible'}
-              onSelect={() => setStrictness
+              onSelect={() => setStrictnessLevel('flexible')}
+            />
+          </View>
+
+          {/* strictness validation error */}
+          {formErrors.strictness && (
+            <Text style={styles.errorText}>{formErrors.strictness}</Text>
+          )}
+        </ScrollView>
+
+        {/* ---------- footer ---------- */}
+        <View style={styles.footer}>
+          <Button
+            title="Next"
+            onPress={handleNext}
+            variant="primary"
+            size="large"
+            fullWidth
+          />
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+/* ───────────────────────── styles ───────────────────────── */
+
+interface CuisineOptionProps {
+  label: string;
+  selected: boolean;
+  onToggle: () => void;
+}
+
+function CuisineOption({ label, selected, onToggle }: CuisineOptionProps) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.cuisineOption,
+        selected && styles.selectedCuisineOption,
+      ]}
+      onPress={onToggle}
+      activeOpacity={0.7}
+    >
+      <Text
+        style={[
+          styles.cuisineOptionText,
+          selected && styles.selectedCuisineOptionText,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  header: {
+    padding: SPACING.lg,
+  },
+  backButton: {
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: SPACING.md,
+  },
+  progressContainer: {
+    marginBottom: SPACING.md,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: SPACING.lg,
+    paddingTop: 0,
+    paddingBottom: SPACING.xxl,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.lg,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: SPACING.md,
+  },
+  cuisineGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  cuisineOption: {
+    width: '33.33%',
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  cuisineOptionText: {
+    textAlign: 'center',
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    color: Colors.text.primary,
+  },
+  selectedCuisineOption: {
+    /* container tweak */
+  },
+  selectedCuisineOptionText: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.highlight,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  otherCuisineInput: {
+    marginTop: SPACING.sm,
+  },
+  allergyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.md,
+  },
+  allergyInput: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  addButton: {
+    marginTop: 24,
+  },
+  allergiesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: SPACING.md,
+  },
+  allergyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.highlight,
+    borderRadius: 16,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    marginRight: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  allergyTagText: {
+    color: Colors.primary,
+    marginRight: SPACING.xs,
+  },
+  allergyTagRemove: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  allergyTagRemoveText: {
+    color: Colors.text.primary,
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  checkboxGroup: {
+    marginBottom: SPACING.md,
+  },
+  radioGroup: {
+    marginBottom: SPACING.md,
+  },
+  errorText: {
+    fontSize: 12,
+    color: Colors.error,
+    marginBottom: SPACING.sm,
+  },
+  footer: {
+    padding: SPACING.lg,
+    paddingTop: 0,
+  },
+});
